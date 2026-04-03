@@ -1,0 +1,26 @@
+# Python-generated files
+/user-generator/__pycache__/
+/user-generator/*.py[oc]
+/user-generator/build/
+/user-generator/dist/
+/user-generator/wheels/
+/user-generator/*.egg-info
+
+# Virtual environments
+/user-generator/.venv/
+
+
+
+# Python-generated files
+/ticket-manager/__pycache__/
+/ticket-manager/*.py[oc]
+/ticket-manager/build/
+/ticket-manager/dist/
+/ticket-manager/wheels/
+/ticket-manager/*.egg-info
+
+# Virtual environments
+/ticket-manager/.venv/
+
+# env
+/ticket-manager/.env
