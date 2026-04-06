@@ -1,4 +1,5 @@
-# Python-generated files
+# user-generator repo
+## Python-generated files
 /user-generator/__pycache__/
 /user-generator/api/__pycache__/
 /user-generator/data/__pycache__/
@@ -10,14 +11,19 @@
 /user-generator/wheels/
 /user-generator/*.egg-info
 
-# Virtual environments
+## Virtual environments
 /user-generator/.venv/
 
-#
+## env
+/user-generator/.env
+
+##
 /user-generator/.claude/
 /user-generator/.vscode/
 
-# Python-generated files
+
+# ticket-manager repo
+## Python-generated files
 /ticket-manager/__pycache__/
 /ticket-manager/api/__pycache__/
 /ticket-manager/data/__pycache__/
@@ -29,12 +35,36 @@
 /ticket-manager/wheels/
 /ticket-manager/*.egg-info
 
-# Virtual environments
+## Virtual environments
 /ticket-manager/.venv/
 
-# env
+## env
 /ticket-manager/.env
 
-#
+##
 /ticket-manager/.claude/
 /ticket-manager/.vscode/
+
+
+# ticket-info repo
+## Python-generated files
+/ticket-info/__pycache__/
+/ticket-info/api/__pycache__/
+/ticket-info/data/__pycache__/
+/ticket-info/models/__pycache__/
+/ticket-info/utils/__pycache__/
+/ticket-info/*.py[oc]
+/ticket-info/build/
+/ticket-info/dist/
+/ticket-info/wheels/
+/ticket-info/*.egg-info
+
+## Virtual environments
+/ticket-info/.venv/
+
+## env
+/ticket-info/.env
+
+##
+/ticket-info/.claude/
+/ticket-info/.vscode/

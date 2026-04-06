@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from models.ticket import Ticket
-from data.query_ticket import populate_tickets_table, get_tickets, delete_all_tickets_query
+from data.query_ticket import populate_tickets_table, get_tickets, delete_all_tickets_query, reserve_ticket_query
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 
@@ -17,3 +17,7 @@ def get_ticket_batch(count: int, starting_index: int = 0):
 def delete_all_tickets():
     delete_count = delete_all_tickets_query()
     return {"deleted": delete_count}
+
+@router.post("/reserve/{ticket_id}")
+def reserve_ticket(ticket_id: int, owner: str):
+    return reserve_ticket_query(ticket_id=ticket_id, owner=owner)
