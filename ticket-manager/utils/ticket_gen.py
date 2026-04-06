@@ -1,6 +1,10 @@
 from data.db import Ticket
 
+
 def generate_ticket() -> Ticket:
     return {
-        "event_type": "Taylor Swift World Tour"
+        "event_type": "Taylor Swift World Tour",
+        "owner": None,
+        "state": "available",
+        "reserved_at": None
     }
