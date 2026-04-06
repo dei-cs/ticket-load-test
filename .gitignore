@@ -9,7 +9,9 @@
 # Virtual environments
 /user-generator/.venv/
 
-
+#
+/user-generator/.claude/
+/user-generator/.vscode/
 
 # Python-generated files
 /ticket-manager/__pycache__/
@@ -24,3 +26,7 @@
 
 # env
 /ticket-manager/.env
+
+#
+/ticket-manager/.claude/
+/ticket-manager/.vscode/

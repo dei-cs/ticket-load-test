@@ -13,3 +13,6 @@ class BaseModel(Model):
 class Ticket(BaseModel):
     id = AutoField()
     event_type = TextField()
+    owner = TextField(null=True)
+    state = TextField() # available // reserved // sold
+    reserved_at = DateTimeField(null=True)
