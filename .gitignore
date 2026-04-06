@@ -1,5 +1,9 @@
 # Python-generated files
 /user-generator/__pycache__/
+/user-generator/api/__pycache__/
+/user-generator/data/__pycache__/
+/user-generator/models/__pycache__/
+/user-generator/utils/__pycache__/
 /user-generator/*.py[oc]
 /user-generator/build/
 /user-generator/dist/
@@ -15,6 +19,10 @@
 
 # Python-generated files
 /ticket-manager/__pycache__/
+/ticket-manager/api/__pycache__/
+/ticket-manager/data/__pycache__/
+/ticket-manager/models/__pycache__/
+/ticket-manager/utils/__pycache__/
 /ticket-manager/*.py[oc]
 /ticket-manager/build/
 /ticket-manager/dist/
