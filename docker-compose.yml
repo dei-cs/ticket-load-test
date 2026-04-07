@@ -1,0 +1,61 @@
+services:
+  redis:
+    image: redis:7.0
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: devuser
+      POSTGRES_PASSWORD: admin4000
+      POSTGRES_DB: ticketmanagerdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "devuser", "-d", "ticketmanagerdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  user-generator:
+    build:
+      context: ./user-generator
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+
+  ticket-manager:
+    build:
+      context: ./ticket-manager
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://devuser:admin4000@postgres:5432/ticketmanagerdb
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "8001:8001"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  ticket-info:
+    build:
+      context: ./ticket-info
+      dockerfile: Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
