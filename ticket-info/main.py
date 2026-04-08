@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 import redis.asyncio as aioredis
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 import uvicorn
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
@@ -14,14 +14,6 @@ STREAM = "ticket-availability"
 GROUP = "ticket-info-service"
 CONSUMER = socket.gethostname()
 AVAILABLE_KEY = "ticket:available"
-
-# Lua script: atomically check membership and remove in one operation
-CLAIM_SCRIPT = """
-local in_set = redis.call('SISMEMBER', KEYS[1], ARGV[1])
-if in_set == 0 then return 0 end
-redis.call('SREM', KEYS[1], ARGV[1])
-return 1
-"""
 
 redis_client: aioredis.Redis = None
 http_client: httpx.AsyncClient = None
@@ -124,40 +116,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Ticket Info Service", lifespan=lifespan)
 
-claim_script = None
-
 
 @app.get("/tickets/available")
 async def get_available_tickets():
     members = await redis_client.smembers(AVAILABLE_KEY)
     return [int(m) for m in members]
-
-
-@app.post("/reserve/{ticket_id}")
-async def reserve_ticket(ticket_id: int, owner: str):
-    global claim_script
-    if claim_script is None:
-        claim_script = redis_client.register_script(CLAIM_SCRIPT)
-
-    claimed = await claim_script(keys=[AVAILABLE_KEY], args=[str(ticket_id)])
-    if not claimed:
-        raise HTTPException(status_code=409, detail="Conflict: Ticket Unavailable")
-
-    resp = await http_client.post(
-        f"{TICKET_MANAGER_URL}/tickets/reserve/{ticket_id}",
-        params={"owner": owner},
-    )
-
-    if resp.status_code == 409:
-        # DB says it's gone — roll back the Redis claim
-        await redis_client.sadd(AVAILABLE_KEY, str(ticket_id))
-        raise HTTPException(status_code=409, detail="Conflict: Ticket Unavailable")
-
-    if resp.status_code != 200:
-        await redis_client.sadd(AVAILABLE_KEY, str(ticket_id))
-        raise HTTPException(status_code=502, detail="Upstream error from ticket-manager")
-
-    return resp.json()
 
 
 def main():
