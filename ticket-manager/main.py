@@ -1,11 +1,22 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 import uvicorn
 from api.ticket_router import router
+from data.db import db, Ticket
 
-app = FastAPI(title="Ticket Manager Tool")
+# Create DB on startup if it doesn't exist
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    db.connect(reuse_if_open=True)
+    db.create_tables([Ticket], safe=True)
+    db.close()
+    yield
+
+
+app = FastAPI(title="Ticket Manager Tool", lifespan=lifespan)
 
 app.include_router(router)
 
