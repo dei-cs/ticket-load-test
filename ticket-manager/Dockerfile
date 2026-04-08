@@ -1,15 +1,12 @@
-FROM python:3.12
+FROM python:3.12-slim
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
 
-
 COPY pyproject.toml uv.lock ./
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir uv \
-    && uv sync --frozen --no-dev --no-install-project
+RUN uv sync --frozen --no-dev
 
-EXPOSE 8001
+COPY . .
 
-COPY . ./
-
-CMD ["uv", "run", "main.py"]
+CMD ["uv", "run", "python", "main.py"]

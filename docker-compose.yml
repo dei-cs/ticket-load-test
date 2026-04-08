@@ -1,26 +1,26 @@
 services:
-  redis:
-    image: redis:7.0
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-  
   postgres:
-    image: postgres:15
+    image: postgres:16
     environment:
       POSTGRES_USER: devuser
-      POSTGRES_PASSWORD: admin4000
+      POSTGRES_PASSWORD: devpassword123
       POSTGRES_DB: ticketmanagerdb
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "devuser", "-d", "ticketmanagerdb"]
+      test: ["CMD-SHELL", "pg_isready -U devuser -d ticketmanagerdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -37,10 +37,15 @@ services:
       context: ./ticket-manager
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql://devuser:admin4000@postgres:5432/ticketmanagerdb
+      DATABASE_URL: postgresql://devuser:devpassword123@postgres:5432/ticketmanagerdb
       REDIS_URL: redis://redis:6379
     ports:
       - "8001:8001"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import socket; socket.create_connection((\"localhost\", 8001), timeout=1)'"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     depends_on:
       redis:
         condition: service_healthy
@@ -53,8 +58,13 @@ services:
       dockerfile: Dockerfile
     environment:
       REDIS_URL: redis://redis:6379
+      TICKET_MANAGER_URL: http://ticket-manager:8001
+    ports:
+      - "8002:8002"
     depends_on:
       redis:
+        condition: service_healthy
+      ticket-manager:
         condition: service_healthy
 
 volumes:
