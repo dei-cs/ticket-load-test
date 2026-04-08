@@ -1,3 +1,7 @@
+# global mono-repo ignores
+.claude/
+.vscode/
+
 # user-generator repo
 ## Python-generated files
 /user-generator/__pycache__/

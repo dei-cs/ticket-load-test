@@ -1,10 +1,7 @@
-import os
-
-import httpx
 import redis.asyncio as aioredis
 
-TICKET_MANAGER_URL = os.getenv("TICKET_MANAGER_URL", "http://localhost:8001")
 AVAILABLE_KEY = "ticket:available"
+RESERVATIONS_STREAM = "ticket-reservations"
 
 CLAIM_SCRIPT = """
 local in_set = redis.call('SISMEMBER', KEYS[1], ARGV[1])
@@ -18,14 +15,9 @@ class TicketUnavailableError(Exception):
     pass
 
 
-class UpstreamError(Exception):
-    pass
-
-
 class CartService:
-    def __init__(self, redis_client: aioredis.Redis, http_client: httpx.AsyncClient):
+    def __init__(self, redis_client: aioredis.Redis):
         self._redis = redis_client
-        self._http = http_client
         self._claim_script = None
 
     async def reserve_ticket(self, ticket_id: int, owner: str) -> dict:
@@ -36,17 +28,5 @@ class CartService:
         if not claimed:
             raise TicketUnavailableError
 
-        resp = await self._http.post(
-            f"{TICKET_MANAGER_URL}/tickets/reserve/{ticket_id}",
-            params={"owner": owner},
-        )
-
-        if resp.status_code == 409:
-            await self._redis.sadd(AVAILABLE_KEY, str(ticket_id))
-            raise TicketUnavailableError
-
-        if resp.status_code != 200:
-            await self._redis.sadd(AVAILABLE_KEY, str(ticket_id))
-            raise UpstreamError
-
-        return resp.json()
+        await self._redis.xadd(RESERVATIONS_STREAM, {"ticket_id": str(ticket_id), "owner": owner})
+        return {"reserved": ticket_id, "owner": owner}

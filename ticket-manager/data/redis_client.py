@@ -1,5 +1,10 @@
-import redis
 import os
 
-redis_client = redis.Redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"))
+import redis
+import redis.asyncio as aioredis
+
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+
+redis_client = redis.Redis.from_url(REDIS_URL)
+async_redis_client = aioredis.from_url(REDIS_URL, decode_responses=True)
 
