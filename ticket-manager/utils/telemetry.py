@@ -24,7 +24,7 @@ def setup_telemetry(service_name: str = "ticket-manager"):
     trace.set_tracer_provider(tracer_provider)
 
     trace_exporter = OTLPSpanExporter(
-        endpoint="localhost:4317",
+        endpoint="otel-collector:4317",
         insecure=True,
     )
 
@@ -34,7 +34,7 @@ def setup_telemetry(service_name: str = "ticket-manager"):
 
     # ---- Metrics ----
     metric_exporter = OTLPMetricExporter(
-        endpoint="localhost:4317",
+        endpoint="otel-collector:4317",
         insecure=True,
     )
 
