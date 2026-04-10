@@ -4,6 +4,9 @@ from utils.ticket_gen import generate_ticket
 from peewee import chunked, fn
 from data.redis_client import redis_client
 from datetime import datetime
+import time
+from utils.telemetry import tracer, reservation_attempts, reservation_results, reservation_duration
+
 
 def populate_tickets_table(count: int):
     db.connect(reuse_if_open=True)
@@ -53,28 +56,44 @@ def delete_all_tickets_query():
     return delete_count
 
 def reserve_ticket_query(ticket_id: int, owner: str):
-    db.connect(reuse_if_open=True)
-    with db.atomic():
-        updated = (
-            Ticket.update(
-                state="reserved",
-                owner=owner,
-                reserved_at=datetime.utcnow()
+    start = time.perf_counter()
+    reservation_attempts.add(1)
+    
+    with tracer.start_as_current_span("reserve_ticket_query") as span:
+        span.set_attribute("ticket.id", ticket_id)
+        span.set_attribute("ticket.owner", owner)
+        db.connect(reuse_if_open=True)
+        with db.atomic():
+            updated = (
+                Ticket.update(
+                    state="reserved",
+                    owner=owner,
+                    reserved_at=datetime.utcnow()
+                )
+                .where(Ticket.id == ticket_id, Ticket.state == "available")
+                .execute()
             )
-            .where(Ticket.id == ticket_id, Ticket.state == "available")
-            .execute()
-        )
+        db.close()
+        
+        duration = time.perf_counter() - start
+        
+        if updated == 0:
+            span.set_attribute("reservation.result", "conflict")
+            reservation_results.add(1, {"result": "conflict"})
+            reservation_duration.record(duration, {"result": "conflict"})
+            raise HTTPException(status_code=409, detail="Conflict: Ticket Unavailable")
     
-    db.close()
-    if updated == 0:
-        raise HTTPException(status_code=409, detail="Conflict: Ticket Unavailable")
-    
-    # Emit the reservation after the DB update succeeds so other services can
-    # remove this ticket from their available-ticket cache.
-    redis_client.xadd("ticket-availability", {
-        "ticket_id": str(ticket_id),
-        "state": "reserved",
-        "owner": owner,
-    })
-    
-    return {"reserved": ticket_id, "owner_user_id": owner}
+        
+        # Emit the reservation after the DB update succeeds so other services can
+        # remove this ticket from their available-ticket cache.
+        redis_client.xadd("ticket-availability", {
+            "ticket_id": str(ticket_id),
+            "state": "reserved",
+            "owner": owner,
+        })
+        
+        span.set_attribute("reservation.result", "success")
+        reservation_results.add(1, {"result": "success"})
+        reservation_duration.record(duration, {"result": "success"})
+        return {"reserved": ticket_id, "owner_user_id": owner}
+
