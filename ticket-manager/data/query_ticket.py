@@ -1,4 +1,3 @@
-from fastapi import HTTPException
 from data.db import Ticket, db
 from utils.ticket_gen import generate_ticket
 from peewee import chunked, fn
@@ -45,24 +44,14 @@ def reserve_ticket_query(ticket_id: int, owner: str):
         span.set_attribute("ticket.owner", owner)
         db.connect(reuse_if_open=True)
         with db.atomic():
-            updated = (
-                Ticket.update(
-                    state="reserved",
-                    owner=owner,
-                    reserved_at=datetime.utcnow()
-                )
-                .where(Ticket.id == ticket_id, Ticket.state == "available")
-                .execute()
-            )
+            Ticket.update(
+                state="reserved",
+                owner=owner,
+                reserved_at=datetime.utcnow()
+            ).where(Ticket.id == ticket_id).execute()
         db.close()
 
         duration = time.perf_counter() - start
-
-        if updated == 0:
-            span.set_attribute("reservation.result", "conflict")
-            reservation_results.add(1, {"result": "conflict"})
-            reservation_duration.record(duration, {"result": "conflict"})
-            raise HTTPException(status_code=409, detail="Conflict: Ticket Unavailable")
 
         span.set_attribute("reservation.result", "success")
         reservation_results.add(1, {"result": "success"})
