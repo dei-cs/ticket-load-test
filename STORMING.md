@@ -8,3 +8,8 @@ There are two Redis architecture styles which are easy to deploy and contributes
 ## DB
 Manage contraints at DB level
 ticket-manager/main.py already owns schema setup, add contraints here so they init on app startup
+
+
+
+## Our main bottlenecks for concurrency ATM
+- cart/main.py and ticket-info/main.py db max connection pool

@@ -8,4 +8,8 @@ dependencies = [
     "asyncpg>=0.30.0",
     "fastapi>=0.135.3",
     "uvicorn>=0.42.0",
+    "opentelemetry-api",
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp",
+    "opentelemetry-instrumentation-fastapi",
 ]
