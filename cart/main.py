@@ -1,25 +1,24 @@
 from contextlib import asynccontextmanager
 import os
 
-import redis.asyncio as aioredis
+import asyncpg
 import uvicorn
 from fastapi import FastAPI
 
 from api.cart_router import router
 from services.cart_service import CartService
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://devuser:devpassword123@localhost:5432/ticketmanagerdb")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    redis_client = aioredis.from_url(REDIS_URL, decode_responses=True)
-
-    app.state.cart_service = CartService(redis_client)
+    pool = await asyncpg.create_pool(DATABASE_URL)
+    app.state.cart_service = CartService(pool)
 
     yield
 
-    await redis_client.aclose()
+    await pool.close()
 
 
 app = FastAPI(title="Cart Service", lifespan=lifespan)

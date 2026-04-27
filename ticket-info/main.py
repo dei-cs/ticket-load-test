@@ -1,36 +1,24 @@
 import os
 from contextlib import asynccontextmanager
 
-import httpx
-import redis.asyncio as aioredis
+import asyncpg
 import uvicorn
 from fastapi import FastAPI
 
 from api.ticket_info_router import router
 from services.ticket_info_service import TicketInfoService
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
-TICKET_MANAGER_URL = os.getenv("TICKET_MANAGER_URL", "http://localhost:8001")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://devuser:devpassword123@localhost:5432/ticketmanagerdb")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    redis_client = aioredis.from_url(REDIS_URL, decode_responses=True)
-    http_client = httpx.AsyncClient(
-        timeout=10.0,
-        limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
-    )
-
-    service = TicketInfoService(redis_client, http_client, TICKET_MANAGER_URL)
-    await service.initialize()
-    service.start_consumer()
-    app.state.ticket_info_service = service
+    pool = await asyncpg.create_pool(DATABASE_URL)
+    app.state.ticket_info_service = TicketInfoService(pool)
 
     yield
 
-    await service.stop_consumer()
-    await redis_client.aclose()
-    await http_client.aclose()
+    await pool.close()
 
 
 app = FastAPI(title="Ticket Info Service", lifespan=lifespan)

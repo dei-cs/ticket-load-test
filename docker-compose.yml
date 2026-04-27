@@ -15,16 +15,6 @@ services:
       timeout: 5s
       retries: 10
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
   user-generator:
     build:
       context: ./user-generator
@@ -38,7 +28,6 @@ services:
       dockerfile: Dockerfile
     environment:
       DATABASE_URL: postgresql://devuser:devpassword123@postgres:5432/ticketmanagerdb
-      REDIS_URL: redis://redis:6379
     ports:
       - "8001:8001"
     healthcheck:
@@ -47,8 +36,6 @@ services:
       timeout: 5s
       retries: 10
     depends_on:
-      redis:
-        condition: service_healthy
       postgres:
         condition: service_healthy
 
@@ -57,14 +44,11 @@ services:
       context: ./ticket-info
       dockerfile: Dockerfile
     environment:
-      REDIS_URL: redis://redis:6379
-      TICKET_MANAGER_URL: http://ticket-manager:8001
+      DATABASE_URL: postgresql://devuser:devpassword123@postgres:5432/ticketmanagerdb
     ports:
       - "8002:8002"
     depends_on:
-      redis:
-        condition: service_healthy
-      ticket-manager:
+      postgres:
         condition: service_healthy
 
   cart:
@@ -72,14 +56,11 @@ services:
       context: ./cart
       dockerfile: Dockerfile
     environment:
-      REDIS_URL: redis://redis:6379
-      TICKET_MANAGER_URL: http://ticket-manager:8001
+      DATABASE_URL: postgresql://devuser:devpassword123@postgres:5432/ticketmanagerdb
     ports:
       - "8003:8003"
     depends_on:
-      redis:
-        condition: service_healthy
-      ticket-manager:
+      postgres:
         condition: service_healthy
 
   tempo:
