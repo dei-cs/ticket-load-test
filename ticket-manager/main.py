@@ -6,6 +6,8 @@ from fastapi import FastAPI
 import uvicorn
 from api.ticket_router import router
 from data.db import db, Ticket
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from utils.telemetry import setup_telemetry
 
 
 @asynccontextmanager
@@ -20,7 +22,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Ticket Manager Tool", lifespan=lifespan)
 
 app.include_router(router)
-
+setup_telemetry("ticket-manager")
+FastAPIInstrumentor.instrument_app(app)
 
 def main():
     uvicorn.run(app, host="0.0.0.0", port=8001)
