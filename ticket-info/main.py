@@ -13,7 +13,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://devuser:devpassword123@lo
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    pool = await asyncpg.create_pool(DATABASE_URL)
+    pool = await asyncpg.create_pool(DATABASE_URL, min_size=10, max_size=50)
     app.state.ticket_info_service = TicketInfoService(pool)
 
     yield

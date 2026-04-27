@@ -14,6 +14,7 @@ from utils.telemetry import setup_telemetry
 async def lifespan(app: FastAPI):
     db.connect(reuse_if_open=True)
     db.create_tables([Ticket], safe=True)
+    db.execute_sql("CREATE INDEX IF NOT EXISTS idx_tickets_state ON tickets(state)")
     db.close()
 
     yield
