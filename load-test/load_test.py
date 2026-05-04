@@ -43,12 +43,14 @@ import random
 import time
 from collections import defaultdict
 
+import os
+
 import httpx
 
-USER_GEN = "http://localhost:8000"
-TICKET_MGR = "http://localhost:8001"
-TICKET_INFO = "http://localhost:8002"
-CART = "http://localhost:8003"
+USER_GEN = os.getenv("USER_GEN_URL", "http://localhost:8000")
+TICKET_MGR = os.getenv("TICKET_MGR_URL", "http://localhost:8001")
+TICKET_INFO = os.getenv("TICKET_INFO_URL", "http://localhost:8002")
+CART = os.getenv("CART_URL", "http://localhost:8003")
 
 
 async def setup(

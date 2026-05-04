@@ -16,7 +16,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://devuser:devpassword123@lo
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_telemetry("cart")
-    pool = await asyncpg.create_pool(DATABASE_URL, min_size=10, max_size=50)
+    pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10, statement_cache_size=0)
     app.state.cart_service = CartService(pool)
 
     yield
@@ -25,6 +25,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Cart Service", lifespan=lifespan)
+
+
+@app.get("/healthz")
+async def healthz():
+    return {"status": "ok"}
+
+
 app.include_router(router)
 FastAPIInstrumentor.instrument_app(app)
 

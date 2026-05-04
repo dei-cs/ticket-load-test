@@ -22,6 +22,12 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Ticket Manager Tool", lifespan=lifespan)
 
+
+@app.get("/healthz")
+async def healthz():
+    return {"status": "ok"}
+
+
 app.include_router(router)
 setup_telemetry("ticket-manager")
 FastAPIInstrumentor.instrument_app(app)

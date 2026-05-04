@@ -1,3 +1,5 @@
+import os
+
 from opentelemetry import trace, metrics
 from opentelemetry.sdk.resources import Resource
 
@@ -16,17 +18,19 @@ def setup_telemetry(service_name: str = "cart"):
         "service.version": "0.1.0",
     })
 
+    _otel_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "otel-collector:4317")
+
     tracer_provider = TracerProvider(resource=resource)
     trace.set_tracer_provider(tracer_provider)
 
     trace_exporter = OTLPSpanExporter(
-        endpoint="otel-collector:4317",
+        endpoint=_otel_endpoint,
         insecure=True,
     )
     tracer_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
 
     metric_exporter = OTLPMetricExporter(
-        endpoint="otel-collector:4317",
+        endpoint=_otel_endpoint,
         insecure=True,
     )
     metric_reader = PeriodicExportingMetricReader(
