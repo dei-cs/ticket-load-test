@@ -24,6 +24,7 @@ class CartService:
                        WHERE id=$3""",
                     owner, datetime.now(timezone.utc), ticket_id,
                 )
+                await conn.execute("SELECT pg_notify('ticket_state_change', $1)", str(ticket_id))
 
             duration = time.perf_counter() - start
             reservation_results.add(1, {"result": "success"})

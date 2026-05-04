@@ -1,3 +1,5 @@
+import os
+
 from opentelemetry import trace, metrics
 from opentelemetry.sdk.resources import Resource
 
@@ -20,11 +22,13 @@ def setup_telemetry(service_name: str = "ticket-manager"):
     })
 
     # ---- Tracing ----
+    _otel_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "otel-collector:4317")
+
     tracer_provider = TracerProvider(resource=resource)
     trace.set_tracer_provider(tracer_provider)
 
     trace_exporter = OTLPSpanExporter(
-        endpoint="otel-collector:4317",
+        endpoint=_otel_endpoint,
         insecure=True,
     )
 
@@ -34,7 +38,7 @@ def setup_telemetry(service_name: str = "ticket-manager"):
 
     # ---- Metrics ----
     metric_exporter = OTLPMetricExporter(
-        endpoint="otel-collector:4317",
+        endpoint=_otel_endpoint,
         insecure=True,
     )
 

@@ -11,6 +11,9 @@ class BaseModel(Model):
 
 
 class Ticket(BaseModel):
+    class Meta:
+        table_name = 'tickets'
+
     id = AutoField()
     event_type = TextField()
     owner = TextField(null=True)

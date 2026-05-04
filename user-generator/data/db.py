@@ -1,7 +1,7 @@
 from peewee import *
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "user_database.db"
+DB_PATH = Path("/app/db-data/user_database.db")
 db = SqliteDatabase(DB_PATH)
 
 class BaseModel(Model):

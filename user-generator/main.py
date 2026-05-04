@@ -4,6 +4,12 @@ from api.user_router import router
 
 app = FastAPI(title="User Generator Tool")
 
+
+@app.get("/healthz")
+async def healthz():
+    return {"status": "ok"}
+
+
 app.include_router(router)
 
 

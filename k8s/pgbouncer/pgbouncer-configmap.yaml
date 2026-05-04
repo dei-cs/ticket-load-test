@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgbouncer-config
+  namespace: ticket-system
+data:
+  pgbouncer.ini: |
+    [databases]
+    ticketmanagerdb = host=postgres port=5432 dbname=ticketmanagerdb
+
+    [pgbouncer]
+    listen_addr = 0.0.0.0
+    listen_port = 5432
+    auth_type = scram-sha-256
+    auth_file = /etc/pgbouncer/userlist.txt
+    pool_mode = transaction
+    max_client_conn = 200
+    default_pool_size = 20
+    reserve_pool_size = 5
+    reserve_pool_timeout = 5
+    server_idle_timeout = 600
+    client_idle_timeout = 0
+    log_connections = 0
+    log_disconnections = 0
+    log_pooler_errors = 1
+    stats_period = 60
