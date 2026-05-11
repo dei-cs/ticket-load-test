@@ -24,7 +24,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: postgres-secret
-                  key: DATABASE_URL
+                  key: DIRECT_DATABASE_URL
           livenessProbe:
             httpGet:
               path: /healthz

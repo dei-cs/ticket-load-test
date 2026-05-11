@@ -58,3 +58,29 @@ Prometheus: http://<node-ip>:30001 (port 9090)
 2. Make load testing + monitoring work
 3. Introduce DB constraints
 4. Add Redis
+
+## Optimization concernes
+- Expensive database queries (@cart/services/cart_service.py)
+
+## Application flow:
+1. User Generator (@user-generator/data/query_user.py) and Ticket manager (@ticket-manager/data/query_ticket.py) pre-seeds users and tickets in the database.
+2. Ticket info reads the database on
+
+## Prio list as pr 08/05:
+1. Automated reservation indexing based on availability data
+    - [ ] Need to be able to differ between two different exceptions, NoTicketsAvailableError and TicketDoubleBookingError.
+2. Database constraints
+    - [ ] Lock resource during commit in flight
+    - [ ] Primary key on ticket id
+3. Apache test loop running
+4. Monitoring with metrics differing between reservation failure reasons (double booking vs no tickets available)
+5. Redis for caching ticket availability data
+    - [ ] Redis pub/sub and scale ticket-info horizontally
+
+
+## Monitoring commands:
+- kubectl get pods -n ticket-system
+- kubectl logs -n ticket-system deployment/cart -tail 100
+- stern -n ticket-system -l app=cart (live monitor all cart replicas)
+- kubectl get events -n ticket-system --sort-by='.lastTimestamp'
+- kubectl get hpa -n ticket-system -w 
