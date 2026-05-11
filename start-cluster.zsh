@@ -17,6 +17,16 @@ echo "=============================="
 # to resize: minikube delete && minikube start --cpus=N --memory=M
 minikube start
 
+echo ""
+echo "=============================="
+echo "Waiting for API server"
+echo "=============================="
+kubectl wait --for=condition=Ready node --all --timeout=120s
+
+# minikube VM DNS may point at host resolver (192.168.65.254) which can't resolve external names
+# patch to 8.8.8.8 so image pulls work; this is idempotent
+minikube ssh "sudo sh -c 'echo nameserver 8.8.8.8 > /tmp/resolv.conf && cp /tmp/resolv.conf /etc/resolv.conf'" 2>/dev/null || true
+
 # ===== ADDONS (one-time, idempotent) =====
 
 echo ""
