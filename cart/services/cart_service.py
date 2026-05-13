@@ -1,54 +1,38 @@
-import time
-from datetime import datetime, timezone
+from datetime import datetime
 
 import asyncpg
-
-from utils.telemetry import tracer, reservation_attempts, reservation_results, reservation_duration
 
 
 def utcnow():
     return datetime.utcnow()
 
-# EXCEPTIONS
-# used for informing about all tickets sold out scenarios
+
 class NoTicketsAvailableError(Exception):
     def __init__(self, requested: int, last_checked: datetime):
         self.requested = requested
         self.last_checked = last_checked
         super().__init__(f"No tickets available, requested {requested}")
 
-# used to inform about double booking attempts
+
 class TicketDoubleBookingError(Exception):
     def __init__(self, requested: int, actually_reserved: int):
         self.requested = requested
         self.actually_reserved = actually_reserved
         super().__init__(f"Double booking detected: requested {requested}, got {actually_reserved}")
 
-# SERVICES CLASS
+
 class CartService:
     def __init__(self, pool: asyncpg.Pool):
         self._pool = pool
 
-    # QUERIES
     async def reserve_ticket(self, ticket_id: int, owner: str) -> dict:
-        start = time.perf_counter()
-        reservation_attempts.add(1)
-
-        with tracer.start_as_current_span("reserve_ticket") as span:
-            span.set_attribute("ticket.id", ticket_id)
-            span.set_attribute("ticket.owner", owner)
-
-            async with self._pool.acquire() as conn:
-                await conn.execute(
-                    """UPDATE tickets SET state='reserved', owner=$1, reserved_at=$2
-                       WHERE id=$3""",
-                    owner, utcnow(), ticket_id,
-                )
-                await conn.execute("SELECT pg_notify('ticket_state_change', $1)", str(ticket_id))
-
-            duration = time.perf_counter() - start
-            reservation_results.add(1, {"result": "success"})
-            reservation_duration.record(duration, {"result": "success"})
+        async with self._pool.acquire() as conn:
+            await conn.execute(
+                """UPDATE tickets SET state='reserved', owner=$1, reserved_at=$2
+                   WHERE id=$3""",
+                owner, utcnow(), ticket_id,
+            )
+            await conn.execute("SELECT pg_notify('ticket_state_change', $1)", str(ticket_id))
 
         return {"reserved": ticket_id, "owner": owner}
 
