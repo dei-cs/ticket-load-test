@@ -84,3 +84,6 @@ Prometheus: http://<node-ip>:30001 (port 9090)
 - stern -n ticket-system -l app=cart (live monitor all cart replicas)
 - kubectl get events -n ticket-system --sort-by='.lastTimestamp'
 - kubectl get hpa -n ticket-system -w 
+
+## Logging metrics
+- 
