@@ -13,7 +13,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://devuser:devpassword123@lo
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10, statement_cache_size=0)
+    pool = await asyncpg.create_pool(DATABASE_URL, min_size=10, max_size=100, statement_cache_size=0)
     app.state.cart_service = CartService(pool)
 
     yield

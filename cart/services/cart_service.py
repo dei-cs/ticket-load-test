@@ -25,21 +25,9 @@ class CartService:
     def __init__(self, pool: asyncpg.Pool):
         self._pool = pool
 
-    async def reserve_ticket(self, ticket_id: int, owner: str) -> dict:
-        async with self._pool.acquire() as conn:
-            await conn.execute(
-                """UPDATE tickets SET state='reserved', owner=$1, reserved_at=$2
-                   WHERE id=$3""",
-                owner, utcnow(), ticket_id,
-            )
-            await conn.execute("SELECT pg_notify('ticket_state_change', $1)", str(ticket_id))
-
-        return {"reserved": ticket_id, "owner": owner}
-
 
     async def reserve_ticket_batch_atomic_with_locking(self, count: int, owner: str) -> [int]:
         async with self._pool.acquire() as conn:
-            # conn.transaction = atomic transaction (all operations finish or none do)
             async with conn.transaction():
                 rows = await conn.fetch(
                     """
@@ -63,12 +51,9 @@ class CartService:
 
                 reserved_tickets = [row["id"] for row in rows]
 
-                for ticket_id in reserved_tickets:
-                    await conn.execute("SELECT pg_notify('ticket_state_change', $1)", str(ticket_id))
-
             return reserved_tickets
-    
-    
+
+
     async def reserve_ticket_batch_no_locking(self, count: int, owner: str) -> [int]:
         async with self._pool.acquire() as conn:
             async with conn.transaction():
@@ -88,11 +73,8 @@ class CartService:
                     """,
                     count, owner, utcnow(),
                 )
-                
-                reserved_tickets = [row["id"] for row in rows]
 
-                for ticket_id in reserved_tickets:
-                    await conn.execute("SELECT pg_notify('ticket_state_change', $1)", str(ticket_id))
+                reserved_tickets = [row["id"] for row in rows]
 
                 if len(reserved_tickets) == 0:
                     raise NoTicketsAvailableError(requested=count, last_checked=utcnow())

@@ -52,7 +52,9 @@ spec:
             failureThreshold: 5
           args:
             - "-c"
-            - "max_connections=150"
+            - "max_connections=500"
+            - "-c"
+            - "shared_buffers=512MB"
           resources:
             requests:
               cpu: 500m
