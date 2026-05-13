@@ -77,6 +77,8 @@ Prometheus: http://<node-ip>:30001 (port 9090)
 5. Redis for caching ticket availability data
     - [ ] Redis pub/sub and scale ticket-info horizontally
 
+- How does request get distributed in cart?
+- Scale pool size with resource limits and HPA
 
 ## Monitoring commands:
 - kubectl get pods -n ticket-system
@@ -85,5 +87,7 @@ Prometheus: http://<node-ip>:30001 (port 9090)
 - kubectl get events -n ticket-system --sort-by='.lastTimestamp'
 - kubectl get hpa -n ticket-system -w 
 
-## Logging metrics
-- 
+## What to adjust during tests:
+- Enable/disable HPA (for constant replica count)
+- Resource allocation
+- Replica min/max

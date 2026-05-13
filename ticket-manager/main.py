@@ -10,7 +10,8 @@ from data.db import db, Ticket
 async def lifespan(app: FastAPI):
     db.connect(reuse_if_open=True)
     db.create_tables([Ticket], safe=True)
-    db.execute_sql("CREATE INDEX IF NOT EXISTS idx_tickets_state ON tickets(state)")
+    db.execute_sql("DROP INDEX IF EXISTS idx_tickets_state")
+    db.execute_sql("CREATE INDEX IF NOT EXISTS idx_tickets_available_id ON tickets(id) WHERE state = 'available'")
     db.close()
 
     yield

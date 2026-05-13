@@ -4,7 +4,7 @@ metadata:
   name: cart
   namespace: ticket-system
 spec:
-  replicas: 3
+  replicas: 5
   selector:
     matchLabels:
       app: cart
@@ -31,20 +31,20 @@ spec:
             httpGet:
               path: /healthz
               port: 8003
-            initialDelaySeconds: 60
+            initialDelaySeconds: 5
             periodSeconds: 10
             failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /healthz
               port: 8003
-            initialDelaySeconds: 60
+            initialDelaySeconds: 5
             periodSeconds: 5
             failureThreshold: 3
           resources:
             requests:
-              cpu: 250m
-              memory: 256Mi
+              cpu: 200m
+              memory: 128Mi
             limits:
-              cpu: 1000m
-              memory: 512Mi
+              cpu: 750m
+              memory: 256Mi
