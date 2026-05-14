@@ -39,17 +39,27 @@ services:
       postgres:
         condition: service_healthy
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
   ticket-info:
     build:
       context: ./ticket-info
       dockerfile: Dockerfile
     environment:
       DATABASE_URL: postgresql://devuser:devpassword123@postgres:5432/ticketmanagerdb
+      REDIS_ENABLED: "true"
+      REDIS_URL: redis://redis:6379
+      REDIS_TTL_SECONDS: "5"
     ports:
       - "8002:8002"
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
 
   cart:
     build:

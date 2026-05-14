@@ -13,9 +13,8 @@ echo "Starting minikube"
 echo "=============================="
 
 # minikube start is a no-op when already running
-# omit --cpus/--memory: minikube rejects changes to an existing profile
-# to resize: minikube delete && minikube start --cpus=N --memory=M
-minikube start
+# --cpus/--memory ignored on existing profile; to resize: minikube delete && re-run this script
+minikube start --cpus=8 --memory=15973
 
 echo ""
 echo "=============================="

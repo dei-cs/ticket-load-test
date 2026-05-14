@@ -91,3 +91,21 @@ Prometheus: http://<node-ip>:30001 (port 9090)
 - Enable/disable HPA (for constant replica count)
 - Resource allocation
 - Replica min/max
+- Redis will not have a big advantage unless we dynamically change the available ticket count
+
+## Enable/disable Redis
+- docker-compose.yml:47 — REDIS_ENABLED: "false"
+- k8s/apps/ticket-info/ticket-info-deployment.yaml:29 —
+  REDIS_ENABLED: "false"
+
+# enable
+  kubectl set env deployment/ticket-info -n ticket-system REDIS_ENABLED=true
+
+# disable
+  kubectl set env deployment/ticket-info -n ticket-system REDIS_ENABLED=false
+
+
+  ### Network
+  - ipconfig getifaddr en0
+  - kubectl port-forward -n ticket-system svc/ticket-manager 8001:8001 --address 0.0.0.0 & kubectl port-forward -n ticket-system svc/ticket-info 8002:8002 --address 0.0.0.0 & kubectl port-forward -n ticket-system svc/cart 8003:8003 --address 0.0.0.0 &
+  - pkill -f "kubectl port-forward.*ticket-system"
