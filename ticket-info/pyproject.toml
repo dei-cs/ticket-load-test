@@ -7,5 +7,6 @@ requires-python = ">=3.12"
 dependencies = [
     "asyncpg>=0.30.0",
     "fastapi>=0.135.3",
+    "redis[asyncio]>=5.0.0",
     "uvicorn>=0.42.0",
 ]
