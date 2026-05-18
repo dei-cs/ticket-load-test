@@ -109,3 +109,17 @@ Prometheus: http://<node-ip>:30001 (port 9090)
   - ipconfig getifaddr en0
   - kubectl port-forward -n ticket-system svc/ticket-manager 8001:8001 --address 0.0.0.0 & kubectl port-forward -n ticket-system svc/ticket-info 8002:8002 --address 0.0.0.0 & kubectl port-forward -n ticket-system svc/cart 8003:8003 --address 0.0.0.0 &
   - pkill -f "kubectl port-forward.*ticket-system"
+  - minikube tunnel (for LoadBalancer services)
+  - kubectl get svc cart -n ticket-system
+
+
+  ### Ideas for writing
+  - Kubernetes Manifest and deployment strategy/process
+  - Resource allocation and optimization
+  - HPA configuration and impact on performance
+  - Redis integration and its effect on performance
+  - Database constraints and their role in ensuring data integrity and performance
+  - Client connections constraints in our test setup
+
+
+  

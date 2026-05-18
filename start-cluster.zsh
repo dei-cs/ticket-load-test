@@ -34,6 +34,7 @@ echo "Enabling addons"
 echo "=============================="
 
 minikube addons enable metrics-server
+minikube addons enable ingress
 
 # ===== APPLY MANIFESTS =====
 
@@ -80,6 +81,12 @@ kubectl rollout status deployment/postgres-exporter -n $NAMESPACE --timeout=120s
 kubectl rollout status deployment/pgbouncer-exporter -n $NAMESPACE --timeout=120s
 kubectl rollout status deployment/prometheus -n $NAMESPACE --timeout=120s
 kubectl rollout status deployment/grafana -n $NAMESPACE --timeout=120s
+echo "Waiting for ingress controller"
+echo "=============================="
+kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=300s
+
+# Apply ingress after controller is ready (webhook requires controller to be running)
+kubectl apply -f k8s/ingress/cart-ingress.yaml
 
 # ===== PORT FORWARDS =====
 # minikube docker driver on macOS: node IP not reachable from host, use port-forward instead
@@ -91,13 +98,14 @@ echo "=============================="
 
 # Kill any stale port-forwards from a previous run
 pkill -f "kubectl port-forward.*ticket-system" 2>/dev/null || true
+pkill -f "kubectl port-forward.*ingress-nginx"  2>/dev/null || true
 sleep 1
 
-kubectl port-forward -n $NAMESPACE svc/user-generator 8000:8000 &>/dev/null &
-kubectl port-forward -n $NAMESPACE svc/ticket-manager 8001:8001 &>/dev/null &
-kubectl port-forward -n $NAMESPACE svc/ticket-info    8002:8002 &>/dev/null &
-kubectl port-forward -n $NAMESPACE svc/cart           8003:8003 &>/dev/null &
-kubectl port-forward -n $NAMESPACE svc/grafana        3000:3000 &>/dev/null &
+kubectl port-forward -n $NAMESPACE    svc/user-generator           8000:8000 &>/dev/null &
+kubectl port-forward -n $NAMESPACE    svc/ticket-manager           8001:8001 &>/dev/null &
+kubectl port-forward -n $NAMESPACE    svc/ticket-info              8002:8002 &>/dev/null &
+kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 8003:80   --address 0.0.0.0 &>/dev/null &
+kubectl port-forward -n $NAMESPACE    svc/grafana                  3000:3000 &>/dev/null &
 
 sleep 2
 
@@ -110,7 +118,7 @@ echo "  Services:"
 echo "    user-generator  http://localhost:8000  (swagger: /docs)"
 echo "    ticket-manager  http://localhost:8001  (swagger: /docs)"
 echo "    ticket-info     http://localhost:8002  (swagger: /docs)"
-echo "    cart            http://localhost:8003  (swagger: /docs)"
+echo "    cart            http://localhost:8003  (via ingress — load-balanced across all replicas)"
 echo ""
 echo "  Observability:"
 echo "    Grafana            http://localhost:3000  (admin/admin)"
