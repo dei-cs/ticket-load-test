@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgbouncer-exporter
+  namespace: ticket-system
+  labels:
+    app: pgbouncer-exporter
+spec:
+  selector:
+    app: pgbouncer-exporter
+  ports:
+    - name: metrics
+      port: 9127
+      targetPort: 9127

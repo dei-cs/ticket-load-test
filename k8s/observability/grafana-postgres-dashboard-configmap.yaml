@@ -225,6 +225,284 @@ data:
             }
           },
           "gridPos": { "h": 8, "w": 18, "x": 6, "y": 16 }
+        },
+        {
+          "id": 9,
+          "type": "row",
+          "title": "PgBouncer Pool",
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 24 }
+        },
+        {
+          "id": 10,
+          "type": "stat",
+          "title": "PgBouncer up",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "expr": "pgbouncer_up" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "green", "value": 1 }
+                ]
+              }
+            }
+          },
+          "gridPos": { "h": 4, "w": 4, "x": 0, "y": 25 }
+        },
+        {
+          "id": 11,
+          "type": "stat",
+          "title": "Clients waiting",
+          "description": "Clients queued waiting for a server slot. Non-zero = pool saturated.",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(pgbouncer_pools_client_waiting_connections{database=\"ticketmanagerdb\"})"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 1 },
+                  { "color": "red", "value": 10 }
+                ]
+              }
+            }
+          },
+          "gridPos": { "h": 4, "w": 4, "x": 4, "y": 25 }
+        },
+        {
+          "id": 12,
+          "type": "stat",
+          "title": "Max client wait (s)",
+          "description": "Longest time any client has been waiting. Alert if > 1s.",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "max(pgbouncer_pools_client_maxwait_seconds{database=\"ticketmanagerdb\"})"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 0.5 },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            }
+          },
+          "gridPos": { "h": 4, "w": 4, "x": 8, "y": 25 }
+        },
+        {
+          "id": 13,
+          "type": "gauge",
+          "title": "Pool utilization %",
+          "description": "Active server conns vs configured pool_size (150). Red at 80%.",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "100 * sum(pgbouncer_pools_server_active_connections{database=\"ticketmanagerdb\"}) / sum(pgbouncer_databases_pool_size{database=\"ticketmanagerdb\"})"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 60 },
+                  { "color": "red", "value": 80 }
+                ]
+              }
+            }
+          },
+          "gridPos": { "h": 8, "w": 4, "x": 12, "y": 25 }
+        },
+        {
+          "id": 14,
+          "type": "timeseries",
+          "title": "PgBouncer pool connections",
+          "description": "cl_active/cl_waiting = client side; sv_active/sv_idle = server side.",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(pgbouncer_pools_client_active_connections{database=\"ticketmanagerdb\"})",
+              "legendFormat": "client active"
+            },
+            {
+              "refId": "B",
+              "expr": "sum(pgbouncer_pools_client_waiting_connections{database=\"ticketmanagerdb\"})",
+              "legendFormat": "client waiting"
+            },
+            {
+              "refId": "C",
+              "expr": "sum(pgbouncer_pools_server_active_connections{database=\"ticketmanagerdb\"})",
+              "legendFormat": "server active"
+            },
+            {
+              "refId": "D",
+              "expr": "sum(pgbouncer_pools_server_idle_connections{database=\"ticketmanagerdb\"})",
+              "legendFormat": "server idle"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 25 }
+        },
+        {
+          "id": 15,
+          "type": "row",
+          "title": "Postgres Connection Health",
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 33 }
+        },
+        {
+          "id": 16,
+          "type": "stat",
+          "title": "Idle in transaction",
+          "description": "Connections holding open transactions but doing nothing. Hold locks. Should be near 0.",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "expr": "pg_connection_health_idle_in_transaction" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 3 },
+                  { "color": "red", "value": 10 }
+                ]
+              }
+            }
+          },
+          "gridPos": { "h": 4, "w": 4, "x": 0, "y": 34 }
+        },
+        {
+          "id": 17,
+          "type": "stat",
+          "title": "Lock waiters",
+          "description": "Connections blocked waiting to acquire a lock.",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "expr": "pg_connection_health_lock_waiters" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 1 },
+                  { "color": "red", "value": 5 }
+                ]
+              }
+            }
+          },
+          "gridPos": { "h": 4, "w": 4, "x": 4, "y": 34 }
+        },
+        {
+          "id": 18,
+          "type": "stat",
+          "title": "Max transaction age (s)",
+          "description": "Age of longest running active transaction. Long-running txns hold locks.",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "expr": "pg_connection_health_max_tx_age_seconds" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 30 },
+                  { "color": "red", "value": 120 }
+                ]
+              }
+            }
+          },
+          "gridPos": { "h": 4, "w": 4, "x": 8, "y": 34 }
+        },
+        {
+          "id": 19,
+          "type": "timeseries",
+          "title": "Connections by app + state",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "pg_connections_by_app_count",
+              "legendFormat": "{{application_name}} / {{state}}"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 34 }
+        },
+        {
+          "id": 20,
+          "type": "timeseries",
+          "title": "Backend-written buffers/sec",
+          "description": "High buffers_backend means bgwriter can't keep up — I/O bottleneck.",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "rate(pg_bgwriter_health_buffers_checkpoint[1m])",
+              "legendFormat": "checkpoint"
+            },
+            {
+              "refId": "B",
+              "expr": "rate(pg_bgwriter_health_buffers_clean[1m])",
+              "legendFormat": "bgwriter"
+            },
+            {
+              "refId": "C",
+              "expr": "rate(pg_bgwriter_health_buffers_backend[1m])",
+              "legendFormat": "backend (bad)"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "ops" } },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 38 }
+        },
+        {
+          "id": 21,
+          "type": "timeseries",
+          "title": "Checkpoint pressure",
+          "description": "checkpoints_req > checkpoints_timed = checkpoint happening too often. Tune checkpoint_completion_target or max_wal_size.",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "rate(pg_bgwriter_health_checkpoints_timed[5m])",
+              "legendFormat": "scheduled"
+            },
+            {
+              "refId": "B",
+              "expr": "rate(pg_bgwriter_health_checkpoints_req[5m])",
+              "legendFormat": "requested (pressure)"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "ops" } },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 38 }
         }
       ]
     }

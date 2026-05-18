@@ -13,6 +13,10 @@ spec:
       labels:
         app: postgres-exporter
     spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command: ['sh', '-c', 'until nc -z postgres 5432; do echo waiting for postgres; sleep 2; done']
       containers:
         - name: postgres-exporter
           image: prometheuscommunity/postgres-exporter:latest
@@ -24,6 +28,12 @@ spec:
                 secretKeyRef:
                   name: postgres-secret
                   key: DIRECT_DATABASE_URL_NO_SSL
+            - name: PG_EXPORTER_EXTEND_QUERY_PATH
+              value: /etc/postgres-exporter/queries.yaml
+          volumeMounts:
+            - name: queries
+              mountPath: /etc/postgres-exporter
+              readOnly: true
           livenessProbe:
             httpGet:
               path: /metrics
@@ -43,3 +53,7 @@ spec:
             limits:
               cpu: 200m
               memory: 128Mi
+      volumes:
+        - name: queries
+          configMap:
+            name: postgres-exporter-queries

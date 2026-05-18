@@ -72,6 +72,15 @@ kubectl rollout status deployment/ticket-manager -n $NAMESPACE --timeout=300s
 kubectl rollout status deployment/ticket-info -n $NAMESPACE --timeout=300s
 kubectl rollout status deployment/user-generator -n $NAMESPACE --timeout=300s
 
+echo ""
+echo "=============================="
+echo "Waiting for observability"
+echo "=============================="
+kubectl rollout status deployment/postgres-exporter -n $NAMESPACE --timeout=120s
+kubectl rollout status deployment/pgbouncer-exporter -n $NAMESPACE --timeout=120s
+kubectl rollout status deployment/prometheus -n $NAMESPACE --timeout=120s
+kubectl rollout status deployment/grafana -n $NAMESPACE --timeout=120s
+
 # ===== PORT FORWARDS =====
 # minikube docker driver on macOS: node IP not reachable from host, use port-forward instead
 
@@ -104,7 +113,9 @@ echo "    ticket-info     http://localhost:8002  (swagger: /docs)"
 echo "    cart            http://localhost:8003  (swagger: /docs)"
 echo ""
 echo "  Observability:"
-echo "    Grafana         http://localhost:3000  (admin/admin)"
+echo "    Grafana            http://localhost:3000  (admin/admin)"
+echo "    postgres-exporter  :9187/metrics  (custom queries: connection health, bgwriter)"
+echo "    pgbouncer-exporter :9127/metrics  (pool utilization, client wait, maxwait)"
 echo ""
 echo "  Load test:"
 echo "    USER_GEN_URL=http://localhost:8000 \\"
