@@ -9,5 +9,4 @@ spec:
   ports:
     - port: 8003
       targetPort: 8003
-      nodePort: 30003
-  type: NodePort
+  type: ClusterIP
