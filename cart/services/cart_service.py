@@ -1,6 +1,13 @@
 from datetime import datetime
+from time import perf_counter
 
 import asyncpg
+
+from utils.telemetry import (
+    reservation_attempts,
+    reservation_duration,
+    reservation_results,
+)
 
 
 def utcnow():
@@ -27,59 +34,84 @@ class CartService:
 
 
     async def reserve_ticket_batch_atomic_with_locking(self, count: int, owner: str) -> [int]:
-        async with self._pool.acquire() as conn:
-            async with conn.transaction():
-                rows = await conn.fetch(
-                    """
-                    WITH grabbed AS (
-                        SELECT id FROM tickets
-                        WHERE state = 'available'
-                        ORDER BY id
-                        LIMIT $1
-                        FOR UPDATE SKIP LOCKED
+        attributes = {"strategy": "locked"}
+        reservation_attempts.add(1, attributes)
+        started_at = perf_counter()
+        result = "error"
+
+        try:
+            async with self._pool.acquire() as conn:
+                async with conn.transaction():
+                    rows = await conn.fetch(
+                        """
+                        WITH grabbed AS (
+                            SELECT id FROM tickets
+                            WHERE state = 'available'
+                            ORDER BY id
+                            LIMIT $1
+                            FOR UPDATE SKIP LOCKED
+                        )
+                        UPDATE tickets
+                        SET state = 'reserved', owner = $2, reserved_at = $3
+                        WHERE id IN (SELECT id FROM grabbed)
+                        RETURNING id
+                        """,
+                        count, owner, utcnow(),
                     )
-                    UPDATE tickets
-                    SET state = 'reserved', owner = $2, reserved_at = $3
-                    WHERE id IN (SELECT id FROM grabbed)
-                    RETURNING id
-                    """,
-                    count, owner, utcnow(),
-                )
 
-                if not rows:
-                    raise NoTicketsAvailableError(requested=count, last_checked=utcnow())
+                    if not rows:
+                        result = "no_tickets_available"
+                        raise NoTicketsAvailableError(requested=count, last_checked=utcnow())
 
-                reserved_tickets = [row["id"] for row in rows]
+                    reserved_tickets = [row["id"] for row in rows]
 
-            return reserved_tickets
+                result = "success"
+                return reserved_tickets
+        finally:
+            result_attributes = attributes | {"result": result}
+            reservation_results.add(1, result_attributes)
+            reservation_duration.record(perf_counter() - started_at, result_attributes)
 
 
     async def reserve_ticket_batch_no_locking(self, count: int, owner: str) -> [int]:
-        async with self._pool.acquire() as conn:
-            async with conn.transaction():
-                rows = await conn.fetch(
-                    """
-                    WITH grabbed AS (
-                        SELECT id FROM tickets
-                        WHERE state = 'available'
-                        ORDER BY id
-                        LIMIT $1
+        attributes = {"strategy": "unsafe"}
+        reservation_attempts.add(1, attributes)
+        started_at = perf_counter()
+        result = "error"
+
+        try:
+            async with self._pool.acquire() as conn:
+                async with conn.transaction():
+                    rows = await conn.fetch(
+                        """
+                        WITH grabbed AS (
+                            SELECT id FROM tickets
+                            WHERE state = 'available'
+                            ORDER BY id
+                            LIMIT $1
+                        )
+                        UPDATE tickets
+                        SET state = 'reserved', owner = $2, reserved_at = $3
+                        WHERE id IN (SELECT id FROM grabbed)
+                        AND state = 'available'
+                        RETURNING id
+                        """,
+                        count, owner, utcnow(),
                     )
-                    UPDATE tickets
-                    SET state = 'reserved', owner = $2, reserved_at = $3
-                    WHERE id IN (SELECT id FROM grabbed)
-                    AND state = 'available'
-                    RETURNING id
-                    """,
-                    count, owner, utcnow(),
-                )
 
-                reserved_tickets = [row["id"] for row in rows]
+                    reserved_tickets = [row["id"] for row in rows]
 
-                if len(reserved_tickets) == 0:
-                    raise NoTicketsAvailableError(requested=count, last_checked=utcnow())
+                    if len(reserved_tickets) == 0:
+                        result = "no_tickets_available"
+                        raise NoTicketsAvailableError(requested=count, last_checked=utcnow())
 
-                if len(reserved_tickets) < count:
-                    raise TicketDoubleBookingError(requested=count, actually_reserved=len(reserved_tickets))
+                    if len(reserved_tickets) < count:
+                        result = "double_booking_detected"
+                        raise TicketDoubleBookingError(requested=count, actually_reserved=len(reserved_tickets))
 
-                return reserved_tickets
+                    result = "success"
+                    return reserved_tickets
+        finally:
+            result_attributes = attributes | {"result": result}
+            reservation_results.add(1, result_attributes)
+            reservation_duration.record(perf_counter() - started_at, result_attributes)

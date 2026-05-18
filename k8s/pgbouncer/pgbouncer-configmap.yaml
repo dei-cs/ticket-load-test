@@ -24,3 +24,5 @@ data:
     log_disconnections = 0
     log_pooler_errors = 1
     stats_period = 60
+    stats_users = pgbouncer_monitor
+    admin_users = pgbouncer_monitor

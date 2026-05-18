@@ -5,7 +5,7 @@ import aiohttp
 from collections import Counter
 
 ENDPOINT = "http://localhost:8003/cart/reserve-batch"
-CONCURRENCY = 1000
+CONCURRENCY = 100
 OWNER = "load-test-bot"
 
 

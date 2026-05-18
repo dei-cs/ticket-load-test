@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgbouncer-exporter
+  namespace: ticket-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pgbouncer-exporter
+  template:
+    metadata:
+      labels:
+        app: pgbouncer-exporter
+    spec:
+      initContainers:
+        - name: wait-for-pgbouncer
+          image: busybox:1.36
+          command: ['sh', '-c', 'until nc -z pgbouncer 5432; do echo waiting for pgbouncer; sleep 2; done']
+      containers:
+        - name: pgbouncer-exporter
+          image: prometheuscommunity/pgbouncer-exporter:latest
+          ports:
+            - containerPort: 9127
+          env:
+            - name: PGBOUNCER_CONN
+              valueFrom:
+                secretKeyRef:
+                  name: pgbouncer-exporter-secret
+                  key: DATA_SOURCE_NAME
+          args:
+            - "--pgBouncer.connectionString=$(PGBOUNCER_CONN)"
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 9127
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 9127
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi

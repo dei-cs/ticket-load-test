@@ -7,6 +7,8 @@ from fastapi import FastAPI
 
 from api.cart_router import router
 from services.cart_service import CartService
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from utils.telemetry import setup_telemetry
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://devuser:devpassword123@localhost:5432/ticketmanagerdb")
 
@@ -20,9 +22,9 @@ async def lifespan(app: FastAPI):
 
     await pool.close()
 
-
+setup_telemetry("cart")
 app = FastAPI(title="Cart Service", lifespan=lifespan)
-
+FastAPIInstrumentor.instrument_app(app)
 
 @app.get("/healthz")
 async def healthz():
