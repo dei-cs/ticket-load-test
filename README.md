@@ -1,47 +1,74 @@
 # ticket-load-test
 
-A research prototype simulating a concurrent concert ticketing system. This serves as a **baseline** for studying correctness and performance trade-offs in distributed reservation workflows under high load.
+A research prototype for stress-testing a **centralized, strongly-consistent PostgreSQL** ticketing system under high concurrent write load.
 
-The system is built as a set of microservices using an asynchronous, event-driven architecture backed by Redis Streams and PostgreSQL.
+The project supports a master's thesis: it pushes a single Postgres instance to its maximum sustainable write throughput on fixed hardware (8 cores / 16 GB), and quantifies how application-side design choices — Uvicorn worker concurrency, connection pool sizing, horizontal replication of the write service, and a Redis availability cache — shift that ceiling.
+
+The full experimental protocol (hypotheses, run matrix, per-run procedure, analysis plan) lives in **[TEST-PLAN.md](TEST-PLAN.md)**.
 
 ---
 
-## Resource Allocation
+## What it studies
 
-Designed for a single node with **8 CPU cores / 16 GB RAM**. ~1.5 GB reserved for Kubernetes system components, leaving ~14.5 GB usable.
+Tickets start `available` and must transition to `reserved` exactly once — no double-booking — while thousands of clients race for them. The questions:
 
-### Base Workloads
+- **RQ1** — optimal Uvicorn workers per cart replica.
+- **RQ2** — optimal DB connections per worker (pool sizing) before coordination overhead dominates.
+- **RQ3** — does a Redis availability cache offload Postgres?
+- **RQ4** — how far does a single centralized Postgres scale as the write tier scales out (1 → 3 → 5 replicas)?
 
-SUT-critical pods (cart, postgres, pgbouncer, redis) run **Guaranteed QoS** (requests == limits). Cart values shown are the **profile 3** baseline; `set-cart-profile.zsh` rewrites them per profile. See `RESOURCE-ALLOCATION.md` for the full breakdown.
+---
 
-| Service | CPU Request | CPU Limit | Memory Request | Memory Limit |
-|---|---|---|---|---|
-| **cart** (×3, Guaranteed) | 1000m | 1000m | 683Mi | 683Mi |
-| **postgres** (Guaranteed) | 2500m | 2500m | 6Gi | 6Gi |
-| **pgbouncer** (Guaranteed) | 1000m | 1000m | 256Mi | 256Mi |
-| **redis** (Guaranteed) | 500m | 500m | 512Mi | 512Mi |
-| ticket-manager | 100m | 500m | 128Mi | 256Mi |
-| ticket-info | scaled to 0 during runs | — | — | — |
-| prometheus | 100m | 500m | 256Mi | 1536Mi |
-| grafana | 200m | 1000m | 512Mi | 1Gi |
-| otel-collector | 50m | 200m | 64Mi | 512Mi |
-| cadvisor | 50m | 200m | 64Mi | 256Mi |
-| postgres-exporter | 50m | 200m | 64Mi | 128Mi |
-| pgbouncer-exporter | 50m | 100m | 32Mi | 64Mi |
-| redis-exporter | 50m | 100m | 32Mi | 64Mi |
+## Architecture
 
-**Totals (profile 3):** ~7.65 cores requested · ~9.9 Gi requested / ~12.5 Gi limited (of ~14.5 Gi usable).
+```
+load generator (external, 3000 clients)
+        │
+        ▼
+   cart (FastAPI + asyncpg)      ← the only service under load
+        │
+        ▼
+   PgBouncer (pool_mode=transaction)
+        │
+        ▼
+   PostgreSQL 16  (single node, synchronous_commit=off)
 
-Postgres receives the largest allocation by design — `shared_buffers=2048MB` keeps hot data in memory and minimizes disk I/O, making it the primary performance lever. Remaining RAM is left free for kernel page cache.
+   Redis ───────── availability cache (Redis path only)
+```
 
-### Cart Replica Profiles (`set-cart-profile.zsh`)
+| Service | Port | Role |
+|---|---|---|
+| **cart** | 8003 | Write service under test — performs reservations. |
+| ticket-manager | 8001 | Seeds / deletes ticket inventory (and warms Redis). Used out-of-band, not under load. |
+| ticket-info | 8002 | Read service. Scaled to 0 during runs (not part of the SUT). |
+| postgres | 5432 | Centralized strongly-consistent store. |
+| pgbouncer | 5432 | Connection multiplexer in front of Postgres. |
+| redis | 6379 | Availability-id cache for the Redis reservation path. |
 
-Used to isolate the cart bottleneck across different horizontal scaling configurations while keeping total node resource usage within budget. Run `./set-cart-profile.zsh <1|3|5>`.
+### Reservation strategies (cart endpoints)
 
-| Profile | Replicas | CPU per pod | Memory per pod | Total cart memory limit |
-|---|---|---|---|---|
-| `1` | 1 | 4000m req / 5000m lim | 3Gi req / 4Gi lim | 4Gi |
-| `3` | 3 | 1500m req / 1700m lim | 1Gi req / 1300Mi lim | ~3.8Gi |
-| `5` | 5 | 900m req / 1000m lim | 512Mi req / 800Mi lim | 4Gi |
+| Endpoint | Strategy | Consistency |
+|---|---|---|
+| `POST /cart/reserve-batch` | `SELECT … FOR UPDATE SKIP LOCKED` + `UPDATE` in one transaction | Safe (no double-booking) |
+| `POST /cart/reserve-batch-redis` | `LPOP` an available id from Redis, then targeted single-row `UPDATE` | Safe; offloads the availability scan + lock contention, not the durable write |
+| `POST /cart/reserve-batch-unsafe` | `LIMIT` without row locking | Unsafe — demonstrates double-booking under contention |
 
-All three profiles target ~4 Gi total cart memory limit, so comparisons reflect replica count and per-pod headroom — not raw resource advantage. PGBouncer is configured with `pool_mode=transaction`, `max_client_conn=1000`, and `default_pool_size=150` to absorb connection spikes across all profiles.
+---
+
+## Observability
+
+Prometheus scrapes the cart app metrics plus exporters for Postgres, PgBouncer, Redis, and node/container CPU (cadvisor). Metrics flow cart → OpenTelemetry Collector → Prometheus → Grafana. A single combined Grafana dashboard surfaces throughput, latency percentiles, outcome breakdown, and per-pod saturation. Screenshot it at run end (time range = steady-state window).
+
+---
+
+## Running
+
+```sh
+./start-cluster.zsh            # bring up the full stack on minikube
+./set-cart-profile.zsh <1|3|5> # select replica profile + pin SUT resources
+./reset-cluster.zsh            # restore clean inventory + connection state between runs
+```
+
+Seed inventory manually via the ticket-manager Swagger UI (`http://localhost:8001/docs` → `POST /generate?count=300000`); this also warms the Redis cache when `REDIS_URL` is set.
+
+Resource allocation, QoS pinning, and the cart replica profiles are documented in **[RESOURCE-ALLOCATION.md](RESOURCE-ALLOCATION.md)**.
