@@ -34,7 +34,7 @@ This document is the experimental protocol for a master's thesis in computer sci
 | Parameter | Value | Rationale |
 |-----------|-------|-----------|
 | Concurrent clients | 3000 | Fixed load level for all comparisons. |
-| Batch size `count` | **Fixed at 2** (not random 1–5) | Comparability — random batch size adds variance that confounds throughput deltas. Choose one value and hold it. |
+| Batch size `count` | **Fixed at 1** (not random 1–5) | Comparability — random batch size adds variance that confounds throughput deltas. Choose one value and hold it. |
 | Postgres `max_connections` | 250 | Server-side cap. |
 | Postgres `shared_buffers` | 2048MB | Hot data resident in RAM. |
 | Postgres `synchronous_commit` | off | Write-throughput lever; keep constant. |
@@ -44,7 +44,7 @@ This document is the experimental protocol for a master's thesis in computer sci
 | Cart total memory limit | ~2 Gi across all replicas | Same intent as CPU. |
 | Tickets seeded per run | 300,000 available | Enough inventory so runs do not deplete inventory before the steady-state window ends. |
 
-> **Note on inventory depletion.** 3000 clients × batch 2 reserves ~6000 tickets per concurrency wave. Confirm the steady-state measurement window does not exhaust the 300k seeded tickets; if it does, raise the seed count or shorten the window. Inventory exhaustion turns the run into a `503 NO_TICKETS_AVAILABLE` benchmark, not a write-throughput benchmark.
+> **Note on inventory depletion.** 3000 clients × batch 1 reserves ~3000 tickets per concurrency wave. Confirm the steady-state measurement window does not exhaust the 300k seeded tickets; if it does, raise the seed count or shorten the window. Inventory exhaustion turns the run into a `503 NO_TICKETS_AVAILABLE` benchmark, not a write-throughput benchmark.
 
 ---
 
@@ -110,7 +110,7 @@ Every run follows the same protocol so runs are comparable and reproducible.
 
 **Execute:**
 9. Record wall-clock start timestamp.
-10. Start the external load tool: 3000 concurrent clients, fixed `count=2`, target the arm's endpoint, fixed run duration (see §6.1).
+10. Start the external load tool: 3000 concurrent clients, fixed `count=1`, target the arm's endpoint, fixed run duration (see §6.1).
 11. Let the system reach steady state (discard the first **30 s** warmup), then measure over a fixed **steady-state window** (e.g. 120 s).
 
 **Capture & reset:**
@@ -138,7 +138,7 @@ Pick run duration in Phase 0 such that the steady-state window (≥120 s recomme
 ### Phase 1 — RQ1: Workers per replica (prerequisite calibration)
 
 **Goal:** for each replica profile, find the worker count that maximizes throughput. Keep DB_POOL_SIZE generous to avoid connection starvation affecting the worker sweep.
-**Held constant:** Redis OFF (`/cart/reserve-batch`), `DB_POOL_SIZE=8` (provisional), 3000 clients, batch 2.
+**Held constant:** Redis OFF (`/cart/reserve-batch`), `DB_POOL_SIZE=8` (provisional), 3000 clients, batch 1.
 **Varied:** `WORKERS` ∈ {1, 2, 4, 6, 8} per replica.
 
 | Profile (replicas) | Workers swept | Total client conns (workers×repl×3) range | Output |
@@ -155,7 +155,7 @@ Pick run duration in Phase 0 such that the steady-state window (≥120 s recomme
 ### Phase 2 — RQ2: Connections per worker / pool sizing (prerequisite calibration)
 
 **Goal:** find `DB_POOL_SIZE` per worker that maximizes Postgres throughput without coordination overhead or idle-connection waste.
-**Held constant:** Redis OFF, optimal workers from Phase 1 per profile, 3000 clients, batch 2.
+**Held constant:** Redis OFF, optimal workers from Phase 1 per profile, 3000 clients, batch 1.
 **Varied:** `DB_POOL_SIZE` ∈ {1, 2, 3, 5, 8} per worker.
 
 Track the connection cascade explicitly:
@@ -182,7 +182,7 @@ Track the connection cascade explicitly:
 ### Phase 3 — RQ3: Redis vs. no-Redis (the offload claim)
 
 **Goal:** prove (or refute) that Redis offloads Postgres.
-**Held constant:** the **best** config from Phases 1+2 (optimal workers + pool per profile), 3000 clients, batch 2. Use the **3-replica profile** as the headline comparison (representative cloud topology); optionally repeat for 1 and 5.
+**Held constant:** the **best** config from Phases 1+2 (optimal workers + pool per profile), 3000 clients, batch 1. Use the **3-replica profile** as the headline comparison (representative cloud topology); optionally repeat for 1 and 5.
 **Varied:** two arms only.
 
 | Arm | Endpoint | `REDIS_ENABLED` | Cache |
@@ -200,7 +200,7 @@ Track the connection cascade explicitly:
 ### Phase 4 — RQ4: Horizontal scaling of the write service
 
 **Goal:** determine whether a centralized strongly-consistent Postgres scales as the cart tier scales out.
-**Held constant:** best per-profile config from Phases 1+2, 3000 clients, batch 2. Run both Redis OFF and Redis ON as two series.
+**Held constant:** best per-profile config from Phases 1+2, 3000 clients, batch 1. Run both Redis OFF and Redis ON as two series.
 **Varied:** replica profile ∈ {1, 3, 5} (total cart CPU budget held ~constant by design).
 
 | Profile | Replicas | Series | Output |
