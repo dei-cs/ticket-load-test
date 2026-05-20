@@ -2,30 +2,6 @@
 .claude/
 .vscode/
 
-# user-generator repo
-## Python-generated files
-/user-generator/__pycache__/
-/user-generator/api/__pycache__/
-/user-generator/data/__pycache__/
-/user-generator/models/__pycache__/
-/user-generator/utils/__pycache__/
-/user-generator/*.py[oc]
-/user-generator/build/
-/user-generator/dist/
-/user-generator/wheels/
-/user-generator/*.egg-info
-
-## Virtual environments
-/user-generator/.venv/
-
-## env
-/user-generator/.env
-
-##
-/user-generator/.claude/
-/user-generator/.vscode/
-
-
 # ticket-manager repo
 ## Python-generated files
 /ticket-manager/__pycache__/

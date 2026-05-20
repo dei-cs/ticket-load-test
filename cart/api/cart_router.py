@@ -41,3 +41,19 @@ async def reserve_ticket_batch_unsafe(request: Request, body: ReserveBatchReques
             "requested": e.requested,
             "actually_reserved": e.actually_reserved
         })
+
+
+@router.post("/cart/reserve-batch-redis", status_code=200)
+async def reserve_ticket_batch_redis(request: Request, body: ReserveBatchRequest):
+    service: CartService = request.app.state.cart_service
+    if not service._redis:
+        return JSONResponse(status_code=503, content={"error": "REDIS_NOT_ENABLED"})
+    try:
+        reserved_tickets = await service.reserve_ticket_batch_redis(body.count, body.owner)
+        return JSONResponse(status_code=200, content={"reserved": reserved_tickets, "owner": body.owner})
+    except NoTicketsAvailableError as e:
+        return JSONResponse(status_code=503, content={
+            "error": "NO_TICKETS_AVAILABLE",
+            "requested": e.requested,
+            "last_checked": e.last_checked.isoformat()
+        })

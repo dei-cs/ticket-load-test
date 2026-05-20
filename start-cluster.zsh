@@ -71,7 +71,6 @@ echo "=============================="
 kubectl rollout status deployment/cart -n $NAMESPACE --timeout=300s
 kubectl rollout status deployment/ticket-manager -n $NAMESPACE --timeout=300s
 kubectl rollout status deployment/ticket-info -n $NAMESPACE --timeout=300s
-kubectl rollout status deployment/user-generator -n $NAMESPACE --timeout=300s
 
 echo ""
 echo "=============================="
@@ -101,7 +100,6 @@ pkill -f "kubectl port-forward.*ticket-system" 2>/dev/null || true
 pkill -f "kubectl port-forward.*ingress-nginx"  2>/dev/null || true
 sleep 1
 
-kubectl port-forward -n $NAMESPACE    svc/user-generator           8000:8000 &>/dev/null &
 kubectl port-forward -n $NAMESPACE    svc/ticket-manager           8001:8001 &>/dev/null &
 kubectl port-forward -n $NAMESPACE    svc/ticket-info              8002:8002 &>/dev/null &
 kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 8003:80   --address 0.0.0.0 &>/dev/null &
@@ -115,7 +113,6 @@ echo "Cluster ready"
 echo "=============================="
 echo ""
 echo "  Services:"
-echo "    user-generator  http://localhost:8000  (swagger: /docs)"
 echo "    ticket-manager  http://localhost:8001  (swagger: /docs)"
 echo "    ticket-info     http://localhost:8002  (swagger: /docs)"
 echo "    cart            http://localhost:8003  (via ingress — load-balanced across all replicas)"
@@ -126,7 +123,6 @@ echo "    postgres-exporter  :9187/metrics  (custom queries: connection health, 
 echo "    pgbouncer-exporter :9127/metrics  (pool utilization, client wait, maxwait)"
 echo ""
 echo "  Load test:"
-echo "    USER_GEN_URL=http://localhost:8000 \\"
 echo "    TICKET_MGR_URL=http://localhost:8001 \\"
 echo "    TICKET_INFO_URL=http://localhost:8002 \\"
 echo "    CART_URL=http://localhost:8003 \\"

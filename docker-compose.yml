@@ -15,13 +15,6 @@ services:
       timeout: 5s
       retries: 10
 
-  user-generator:
-    build:
-      context: ./user-generator
-      dockerfile: Dockerfile
-    ports:
-      - "8000:8000"
-
   ticket-manager:
     build:
       context: ./ticket-manager

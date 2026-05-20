@@ -1,0 +1,557 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-combined-dashboard
+  namespace: ticket-system
+data:
+  combined.json: |
+    {
+      "uid": "ticket-load-test-overview",
+      "title": "Ticket Load Test — Overview",
+      "tags": ["ticket-load-test"],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "version": 2,
+      "refresh": "5s",
+      "editable": true,
+      "graphTooltip": 0,
+      "time": { "from": "now-30m", "to": "now" },
+      "panels": [
+        {
+          "id": 100,
+          "type": "row",
+          "title": "App Services",
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+        },
+        {
+          "id": 1,
+          "type": "timeseries",
+          "title": "Active requests",
+          "description": "Number of HTTP requests currently being processed across all services over time. Watch this rise as virtual users ramp up. If active requests keep growing but Total RPS stays flat, the service is saturating — new requests queue up faster than old ones finish. Cross-reference: Total RPS (if RPS plateaus while this grows, something is bottlenecked), p95 latency (rising latency alongside high active requests = saturation), Cart CPU % (if CPU hits 100% while active requests spike, CPU is the hard ceiling).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "sum(http_server_active_requests)", "legendFormat": "active" }],
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "fillOpacity": 10 },
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 50 }, { "color": "red", "value": 100 }] }
+            }
+          },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 1 }
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Total RPS",
+          "description": "Average requests per second processed over the selected time window. Healthy: scales proportionally with virtual users. Warning: if RPS plateaus while active requests keep growing, something is bottlenecked. Cross-reference: Active requests (flat RPS + growing active count = saturation), p95 latency (rising latency alongside flat RPS = service under stress), Connections by state (RPS stalling while idle postgres connections grow = the DB is the bottleneck).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "sum(rate(http_server_duration_milliseconds_count[1m]))" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+            }
+          },
+          "options": { "reduceOptions": { "calcs": ["mean"] }, "colorMode": "background" },
+          "gridPos": { "h": 6, "w": 8, "x": 0, "y": 9 }
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "p50 latency",
+          "description": "Median response time — half of all requests complete faster than this. A rising p50 means the majority of requests are slow, indicating the whole service is under stress. Cross-reference: p95 latency (if p95 rises but p50 stays flat, only tail requests are slow — likely lock contention or GC pauses), Active requests (high concurrent requests + rising p50 = saturation), Postgres Transactions/sec (slow DB commits slow down response times).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "histogram_quantile(0.50, sum by (le) (rate(http_server_duration_milliseconds_bucket[1m])))" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ms",
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 500 }, { "color": "red", "value": 1000 }] }
+            }
+          },
+          "options": { "reduceOptions": { "calcs": ["mean"] }, "colorMode": "background" },
+          "gridPos": { "h": 6, "w": 8, "x": 8, "y": 9 }
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "p95 latency",
+          "description": "95th percentile response time — 1 in 20 requests takes this long or longer. More sensitive than p50 and typically the first indicator of trouble. Cross-reference: Lock waiters (if p95 spikes and lock waiters appear, transactions are blocking each other), Clients waiting (if p95 spikes and pgbouncer queue grows, the connection pool is the bottleneck), Rollback ratio % (rising rollbacks cause application retries which inflate p95).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_duration_milliseconds_bucket[1m])))" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ms",
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 500 }, { "color": "red", "value": 1000 }] }
+            }
+          },
+          "options": { "reduceOptions": { "calcs": ["mean"] }, "colorMode": "background" },
+          "gridPos": { "h": 6, "w": 8, "x": 16, "y": 9 }
+        },
+        {
+          "id": 5,
+          "type": "row",
+          "title": "Resource Ceilings",
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 }
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "Cart: CPU % of limit",
+          "description": "CPU usage of all cart pods combined as a % of the total CPU limit for the 3-replica profile (3 × 1.7 cores = 5.1 cores). Above 80% = cart replicas are CPU-constrained. Above 95% = CPU throttling is adding latency to every request. Fix: scale replicas or optimize application code. Cross-reference: Total RPS (if RPS stalls when this hits 80%, cart CPU is the hard ceiling), Active requests (rising active count + high CPU = CPU-bound saturation), Postgres CPU % (if both are high simultaneously, load is hitting both layers).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "100 * sum(rate(container_cpu_usage_seconds_total{namespace=\"ticket-system\", pod=~\"cart-.*\", container=\"\"}[1m])) / 5.0", "legendFormat": "cart" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "custom": { "fillOpacity": 10 },
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 80 }, { "color": "red", "value": 95 }] }
+            }
+          },
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 }
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "Postgres: CPU % of limit",
+          "description": "CPU usage of the postgres pod as a % of its limit (2.0 cores). High CPU with many active connections = too many concurrent queries. High CPU with few connections = expensive queries (full table scans, missing indexes). Cross-reference: Buffer cache hit ratio (low cache hit + high CPU = disk reads are making queries expensive), Lock waiters (lock contention forces queries to wait and burns CPU), Connections by state (many 'active' state connections = high concurrent query load).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "100 * sum(rate(container_cpu_usage_seconds_total{namespace=\"ticket-system\", pod=~\"postgres-.*\", container=\"\"}[1m])) / 2.0", "legendFormat": "postgres" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "custom": { "fillOpacity": 10 },
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 80 }, { "color": "red", "value": 95 }] }
+            }
+          },
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 }
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "PgBouncer: CPU % of limit",
+          "description": "CPU usage of the pgbouncer pod as a % of its limit (0.5 cores). PgBouncer is a lightweight proxy and should rarely exceed 30% CPU. If it spikes, you have an extreme rate of connection open/close events (connection churn). Cross-reference: Pool utilization % (high pool util + high CPU = pgbouncer working hard to manage the pool), Clients waiting (CPU spike alongside waiting clients = pgbouncer itself may be saturated).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "100 * sum(rate(container_cpu_usage_seconds_total{namespace=\"ticket-system\", pod=~\"pgbouncer-.*\", container=\"\"}[1m])) / 0.5", "legendFormat": "pgbouncer" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "custom": { "fillOpacity": 10 },
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 80 }, { "color": "red", "value": 95 }] }
+            }
+          },
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 }
+        },
+        {
+          "id": 9,
+          "type": "timeseries",
+          "title": "Cart: Memory % of limit",
+          "description": "Memory working set of all cart pods combined as a % of the total memory limit (3-replica: 3 × 1.3Gi = 3.9Gi). Near 95% = Kubernetes may OOM-kill pods, causing restarts and dropped requests. Cross-reference: Cart CPU % (both rising together = cart is fully saturated, scale replicas), Memory by pod (check if load is evenly distributed or one replica is using much more memory than others).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "100 * sum(container_memory_working_set_bytes{namespace=\"ticket-system\", pod=~\"cart-.*\", container=\"\"}) / 7077888000", "legendFormat": "cart" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "custom": { "fillOpacity": 10 },
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 80 }, { "color": "red", "value": 95 }] }
+            }
+          },
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 }
+        },
+        {
+          "id": 10,
+          "type": "timeseries",
+          "title": "Postgres: Memory % of limit",
+          "description": "Memory working set of the postgres pod as a % of its limit (6Gi). Postgres uses memory for shared_buffers (the data cache) and work_mem (sort and join operations). High memory + high buffer cache hit ratio = postgres is caching data efficiently. Near 95% = OOM risk. Cross-reference: Buffer cache hit ratio (low hit ratio despite high memory = shared_buffers may be misconfigured relative to working set size), Postgres CPU % (both high = postgres is under heavy query load).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "100 * sum(container_memory_working_set_bytes{namespace=\"ticket-system\", pod=~\"postgres-.*\", container=\"\"}) / 6442450944", "legendFormat": "postgres" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "custom": { "fillOpacity": 10 },
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 80 }, { "color": "red", "value": 95 }] }
+            }
+          },
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 }
+        },
+        {
+          "id": 11,
+          "type": "timeseries",
+          "title": "PgBouncer: Memory % of limit",
+          "description": "Memory usage of the pgbouncer pod as a % of its limit (256Mi). Should be very stable throughout a load test. A sudden jump indicates far more active connections than expected. Cross-reference: Clients waiting (memory spike + many waiting clients = connection pool storm), Pool utilization % (high pool util confirms the pool is under pressure).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "100 * sum(container_memory_working_set_bytes{namespace=\"ticket-system\", pod=~\"pgbouncer-.*\", container=\"\"}) / 268435456", "legendFormat": "pgbouncer" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "custom": { "fillOpacity": 10 },
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 80 }, { "color": "red", "value": 95 }] }
+            }
+          },
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 }
+        },
+        {
+          "id": 12,
+          "type": "row",
+          "title": "Container Resources",
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 }
+        },
+        {
+          "id": 13,
+          "type": "timeseries",
+          "title": "CPU cores by pod",
+          "description": "Absolute CPU cores consumed per individual pod (not normalized to limits). Use this after checking the CPU % panels to see whether load is evenly distributed across replicas. Uneven distribution across cart replicas suggests sticky sessions or routing imbalance — one pod is doing most of the work. Cross-reference: Cart CPU % (same data as a percentage of limit), Memory by pod (view both together for a complete resource picture per pod).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"ticket-system\", container=\"\"}[1m]))", "legendFormat": "{{pod}}" }],
+          "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 5 } } },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 33 }
+        },
+        {
+          "id": 14,
+          "type": "timeseries",
+          "title": "Memory by pod",
+          "description": "Absolute memory working set per individual pod in bytes. Compare pods of the same type — if one cart replica uses significantly more memory than others, it may have a memory leak or be holding more session state. A healthy pod's memory grows during load and stabilizes after. Memory that keeps growing after load ends = memory leak. Cross-reference: Cart Memory %, CPU cores by pod.",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"ticket-system\", container=\"\"})", "legendFormat": "{{pod}}" }],
+          "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "fillOpacity": 5 } } },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 33 }
+        },
+        {
+          "id": 15,
+          "type": "row",
+          "title": "Postgres",
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 41 }
+        },
+        {
+          "id": 16,
+          "type": "timeseries",
+          "title": "Connections by state",
+          "description": "Postgres connection count over time, split by state. 'active' = currently running a query. 'idle' = connected but waiting for a command. 'idle in transaction' = has an open transaction but no active query — holds all its row locks the entire time. 'waiting' = blocked on a lock held by another connection. Healthy: mostly idle between bursts, 'active' spikes during load. Warning: growing 'idle in transaction' = application is not committing transactions. Red flag: growing 'waiting' = lock contention building up. Cross-reference: Idle in transaction timeseries (detailed view of idle-in-txn), Lock waiters timeseries (confirms 'waiting' state connections), Connection usage % (check if postgres is nearing its connection limit).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "sum by (state) (pg_stat_activity_count{state!=\"fastpath function call\"})" }],
+          "gridPos": { "h": 8, "w": 18, "x": 0, "y": 42 }
+        },
+        {
+          "id": 17,
+          "type": "gauge",
+          "title": "Connection usage %",
+          "description": "Total postgres connections as a % of the max_connections setting. Above 85% = postgres will start refusing new connections with 'too many clients' errors, causing request failures. This counts PgBouncer's server-side connections plus any direct connections. Cross-reference: Pool utilization % (if pool util is low but connection usage is high, something other than your app is connecting directly to postgres), Connections by state (which state is consuming the connections).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "100 * sum(pg_stat_activity_count) / scalar(max(pg_settings_max_connections))" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 60 }, { "color": "red", "value": 85 }] }
+            }
+          },
+          "options": { "reduceOptions": { "calcs": ["mean"] } },
+          "gridPos": { "h": 8, "w": 6, "x": 18, "y": 42 }
+        },
+        {
+          "id": 18,
+          "type": "stat",
+          "title": "Transactions/sec",
+          "description": "Average rate of committed database transactions per second over the time window. Low TPS during high request load means transactions are slow — likely waiting on locks or doing expensive queries. Cross-reference: Rollback ratio % (wasted TPS due to rollbacks), Total deadlocks (each deadlock aborts one transaction), Lock waiters (transactions waiting on locks reduce effective TPS), Active requests (high in-flight requests with low TPS = database is the bottleneck).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "rate(pg_stat_database_xact_commit{datname=\"ticketmanagerdb\"}[1m])" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+            }
+          },
+          "options": { "reduceOptions": { "calcs": ["mean"] }, "colorMode": "background" },
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 50 }
+        },
+        {
+          "id": 19,
+          "type": "stat",
+          "title": "Rollback ratio %",
+          "description": "Percentage of transactions that rolled back rather than committed, averaged over the time window. Under 1% is normal (optimistic locking retries, transient errors). Above 5% = systematic problem — likely deadlocks, lock timeouts, or application error handling that always rolls back on failure. Cross-reference: Total deadlocks (each deadlock produces one rollback), Lock waiters (high lock waits often precede rollbacks), Idle in transaction (transactions left open too long often end in rollback or abort).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "100 * rate(pg_stat_database_xact_rollback{datname=\"ticketmanagerdb\"}[1m]) / (rate(pg_stat_database_xact_commit{datname=\"ticketmanagerdb\"}[1m]) + rate(pg_stat_database_xact_rollback{datname=\"ticketmanagerdb\"}[1m]))" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 }] }
+            }
+          },
+          "options": { "reduceOptions": { "calcs": ["mean"] }, "colorMode": "background" },
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 50 }
+        },
+        {
+          "id": 20,
+          "type": "stat",
+          "title": "Total deadlocks",
+          "description": "Cumulative count of deadlocks detected by postgres. Any non-zero value during a load test is a red flag. A deadlock occurs when two transactions each hold a lock the other needs — postgres resolves by aborting one, which appears as a rollback and triggers an application retry. Common causes: updating rows in inconsistent order across transactions, or long-running transactions combined with high concurrency. Cross-reference: Rollback ratio % (each deadlock = one rollback), Lock waiters timeseries (deadlocks appear as brief lock-wait spikes that suddenly resolve).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "pg_stat_database_deadlocks{datname=\"ticketmanagerdb\"}" }],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }
+            }
+          },
+          "options": { "reduceOptions": { "calcs": ["mean"] } },
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 50 }
+        },
+        {
+          "id": 21,
+          "type": "row",
+          "title": "PgBouncer Pool",
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 58 }
+        },
+        {
+          "id": 22,
+          "type": "stat",
+          "title": "PgBouncer up",
+          "description": "Whether the PgBouncer proxy is reachable (1 = up, 0 = down). If this shows 0, all database connections from the application are failing immediately — complete database outage from the app's perspective, even if postgres itself is still running. Cross-reference: Connections by state (postgres may still show connections if other clients bypass pgbouncer).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "pgbouncer_up" }],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+            }
+          },
+          "options": { "reduceOptions": { "calcs": ["mean"] } },
+          "gridPos": { "h": 4, "w": 4, "x": 0, "y": 59 }
+        },
+        {
+          "id": 23,
+          "type": "stat",
+          "title": "Max client wait (s)",
+          "description": "The longest time any single application client spent waiting in the PgBouncer queue for a free connection slot. Above 0.5s means clients are experiencing significant pool wait time on top of actual query time — this directly inflates p95 latency. Above 1s = serious pool saturation. Cross-reference: Clients waiting timeseries (how many clients are queued), Pool utilization % (how full the pool is), p95 latency (every second clients wait adds directly to request latency).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "max(pgbouncer_pools_client_maxwait_seconds{database=\"ticketmanagerdb\"})" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 0.5 }, { "color": "red", "value": 1 }] }
+            }
+          },
+          "options": { "reduceOptions": { "calcs": ["mean"] } },
+          "gridPos": { "h": 4, "w": 4, "x": 4, "y": 59 }
+        },
+        {
+          "id": 24,
+          "type": "gauge",
+          "title": "Pool utilization %",
+          "description": "PgBouncer server-side connections actively in use as a % of the configured pool_size. This is the leading indicator — it rises before clients start queuing. Above 80% = pool near capacity. Above 95% = clients are already waiting. Cross-reference: Clients waiting (confirms clients are actually queuing), Max client wait (how long they wait), Postgres CPU % (if postgres CPU is low while this is at 100%, the fix is increasing pool_size — postgres has headroom and the pool is too small).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "100 * sum(pgbouncer_pools_server_active_connections{database=\"ticketmanagerdb\"}) / sum(pgbouncer_databases_pool_size{database=\"ticketmanagerdb\"})" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 60 }, { "color": "red", "value": 80 }] }
+            }
+          },
+          "options": { "reduceOptions": { "calcs": ["mean"] } },
+          "gridPos": { "h": 12, "w": 16, "x": 8, "y": 59 }
+        },
+        {
+          "id": 25,
+          "type": "timeseries",
+          "title": "Clients waiting",
+          "description": "Number of application connections currently queued at PgBouncer waiting for a free server-side connection slot over time. Any non-zero value means PgBouncer — not postgres — is the bottleneck. The fix is increasing pool_size in pgbouncer config, not adding postgres resources. Cross-reference: Pool utilization % (must be near 100% for clients to be waiting), Postgres CPU % (low postgres CPU while clients wait = pool is too small, not a DB performance issue), p95 latency (each second clients wait adds directly to request latency).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "sum(pgbouncer_pools_client_waiting_connections{database=\"ticketmanagerdb\"})", "legendFormat": "waiting" }],
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "fillOpacity": 10 },
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 10 }] }
+            }
+          },
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 63 }
+        },
+        {
+          "id": 26,
+          "type": "timeseries",
+          "title": "PgBouncer pool connections",
+          "description": "Full picture of connection states across the PgBouncer pool over time. 'client active' = app requests currently being served. 'client waiting' = app requests queued for a free slot. 'server active' = postgres backend connections in use. 'server idle' = postgres connections held open but unused (this is the pool's headroom). Healthy: server_idle > 0. Saturation: client_waiting rises while server_active is pegged at the pool_size ceiling and server_idle drops to 0. Cross-reference: Clients waiting (same client_waiting data, easier to read spike shape), Pool utilization % (summary gauge of server_active vs pool_size).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "expr": "sum(pgbouncer_pools_client_active_connections{database=\"ticketmanagerdb\"})", "legendFormat": "client active" },
+            { "refId": "B", "expr": "sum(pgbouncer_pools_client_waiting_connections{database=\"ticketmanagerdb\"})", "legendFormat": "client waiting" },
+            { "refId": "C", "expr": "sum(pgbouncer_pools_server_active_connections{database=\"ticketmanagerdb\"})", "legendFormat": "server active" },
+            { "refId": "D", "expr": "sum(pgbouncer_pools_server_idle_connections{database=\"ticketmanagerdb\"})", "legendFormat": "server idle" }
+          ],
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 71 }
+        },
+        {
+          "id": 27,
+          "type": "row",
+          "title": "Postgres Connection Health",
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 79 }
+        },
+        {
+          "id": 28,
+          "type": "timeseries",
+          "title": "Idle in transaction",
+          "description": "Number of postgres connections that have an open transaction but no active query — doing nothing, but holding all their row locks. Each such connection blocks any other transaction that needs those same rows. Should be 0 throughout a test. Sustained non-zero = application bug (not calling commit/rollback), a crashed process that left a transaction open, or connection pool misconfiguration. Cross-reference: Lock waiters (idle-in-transaction connections are the most common cause of lock waits — the two panels should move together), Max transaction age (shows how long the oldest open transaction has been sitting).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "pg_connection_health_idle_in_transaction", "legendFormat": "idle in txn" }],
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "fillOpacity": 10 },
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 3 }, { "color": "red", "value": 10 }] }
+            }
+          },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 80 }
+        },
+        {
+          "id": 29,
+          "type": "timeseries",
+          "title": "Lock waiters",
+          "description": "Number of postgres connections currently blocked, waiting to acquire a row or table lock held by another connection. Non-zero during a load test = write contention. Sustained high values mean transactions are taking too long and queuing behind each other. Common causes: missing indexes causing queries to lock more rows than necessary, long-running transactions, bulk updates without batching. Cross-reference: Idle in transaction (idle-in-txn connections are the most common cause of lock waits), Max transaction age (the older a transaction, the more it is blocking others), Rollback ratio % (deadlocks — a form of lock contention — appear as rollbacks).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "pg_connection_health_lock_waiters", "legendFormat": "lock waiters" }],
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "fillOpacity": 10 },
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 }] }
+            }
+          },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 80 }
+        },
+        {
+          "id": 30,
+          "type": "stat",
+          "title": "Max transaction age (s)",
+          "description": "Age in seconds of the longest currently open active transaction. A transaction that stays open holds its row locks for that entire duration, blocking other transactions from accessing the same rows. Above 30s = likely a slow or stuck query. Above 120s = almost certainly a stuck transaction that should be investigated or killed. Cross-reference: Idle in transaction (stuck transactions are often in 'idle in transaction' state), Lock waiters (the transaction with the highest age is likely the one blocking the most other connections).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "pg_connection_health_max_tx_age_seconds" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 30 }, { "color": "red", "value": 120 }] }
+            }
+          },
+          "options": { "reduceOptions": { "calcs": ["mean"] } },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 88 }
+        },
+        {
+          "id": 31,
+          "type": "row",
+          "title": "Query Performance & Redis",
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 92 }
+        },
+        {
+          "id": 32,
+          "type": "gauge",
+          "title": "Postgres: Buffer cache hit ratio",
+          "description": "Percentage of postgres data block reads served from RAM (shared_buffers) rather than disk. Above 99% = healthy, almost all data fits in memory. Below 90% = postgres is reading from disk frequently, adding significant latency to every query. This is a resource problem — the fix is increasing postgres memory limits or shared_buffers settings — not a query contention problem. Cross-reference: Postgres Memory % (if memory is high but cache hit is still low, shared_buffers is misconfigured), Postgres CPU % (disk reads add I/O wait CPU), Transactions/sec (low cache hit causes slower queries which reduce effective TPS).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "100 * (sum(rate(pg_statio_user_tables_heap_blocks_hit{datname=\"ticketmanagerdb\"}[1m])) / (sum(rate(pg_statio_user_tables_heap_blocks_hit{datname=\"ticketmanagerdb\"}[1m])) + sum(rate(pg_statio_user_tables_heap_blocks_read{datname=\"ticketmanagerdb\"}[1m])))) or vector(0)"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "noValue": "0",
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 90 }, { "color": "green", "value": 99 }] }
+            }
+          },
+          "options": { "reduceOptions": { "calcs": ["mean"] } },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 93 }
+        },
+        {
+          "id": 34,
+          "type": "gauge",
+          "title": "Redis: Cache hit ratio",
+          "description": "Percentage of Redis key lookups that found the key (hit) vs failed and fell through to Postgres (miss). A healthy cache serves 90%+ of reads from Redis, protecting Postgres from read load. When this drops, Postgres absorbs the extra read traffic directly. Causes of misses: cache keys expired too quickly, working set is larger than Redis memory, or cache was not warmed up at the start of the test. Cross-reference: Postgres Transactions/sec (if Redis hit ratio drops, postgres TPS should spike proportionally as more reads hit the DB), Total RPS (high traffic with low Redis hit ratio = postgres is handling nearly all reads), Postgres CPU % (redis misses increase postgres query load).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "100 * redis_keyspace_hits_total / clamp_min(redis_keyspace_hits_total + redis_keyspace_misses_total, 1)"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 80 }, { "color": "green", "value": 90 }] }
+            }
+          },
+          "options": { "reduceOptions": { "values": false, "calcs": ["mean"], "fields": "" }, "orientation": "auto", "showThresholdLabels": false, "showThresholdMarkers": true },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 93 }
+        },
+        {
+          "id": 35,
+          "type": "row",
+          "title": "Redis Resources",
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 101 }
+        },
+        {
+          "id": 36,
+          "type": "timeseries",
+          "title": "Redis: CPU % of limit",
+          "description": "CPU usage of the Redis pod as a % of its 500m limit. Redis is single-threaded for commands — if CPU hits 100%, Redis itself is the bottleneck and LPOP ops will queue. Cross-reference: Redis LPOP rate (if LPOP rate flatlines with CPU at 100%, Redis is the ceiling), Total RPS.",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "100 * sum(rate(container_cpu_usage_seconds_total{namespace=\"ticket-system\", pod=~\"redis-[^e].*\", container=\"\"}[1m])) / 0.5", "legendFormat": "redis" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "custom": { "fillOpacity": 10 },
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 90 }] }
+            }
+          },
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 102 }
+        },
+        {
+          "id": 37,
+          "type": "timeseries",
+          "title": "Redis: Memory % of limit",
+          "description": "Memory used by Redis as a % of its 512Mi limit. Near 100% triggers eviction — Redis starts dropping keys. For tickets:available_ids list, eviction silently loses ticket IDs causing reservation failures even when tickets remain in Postgres. Cross-reference: Redis CPU % (both high = Redis fully saturated).",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "100 * sum(container_memory_working_set_bytes{namespace=\"ticket-system\", pod=~\"redis-[^e].*\", container=\"\"}) / 536870912", "legendFormat": "redis" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "custom": { "fillOpacity": 10 },
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 90 }] }
+            }
+          },
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 102 }
+        },
+        {
+          "id": 38,
+          "type": "timeseries",
+          "title": "Redis: LPOP rate (reservations/s)",
+          "description": "Rate of LPOP commands per second — directly maps to ticket reservations processed through the Redis pre-filter path. Should track Total RPS 1:1 when using /reserve-batch-redis. LPOP plateau + Redis CPU at 100% = Redis is the hard ceiling. Cross-reference: Redis CPU %, Total RPS.",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "rate(redis_commands_total{cmd=\"lpop\"}[1m])", "legendFormat": "lpop/s" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "custom": { "fillOpacity": 10 },
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+            }
+          },
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 102 }
+        }
+      ]
+    }

@@ -7,13 +7,6 @@ data:
   datasources.yaml: |
     apiVersion: 1
     datasources:
-      - name: Tempo
-        uid: tempo
-        type: tempo
-        access: proxy
-        url: http://tempo:3200
-        isDefault: false
-        editable: true
       - name: Prometheus
         uid: prometheus
         type: prometheus

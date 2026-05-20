@@ -121,5 +121,56 @@ Prometheus: http://<node-ip>:30001 (port 9090)
   - Database constraints and their role in ensuring data integrity and performance
   - Client connections constraints in our test setup
 
+Testing 100 iterations across 300000 tickets with 3000 concurrent users attempting to reserve.
 
-  
+before running a test run
+- run set-cart-profile.zsh
+- check pods up with kubectl get pods -n ticket-system
+- check pods up with stern -n ticket-system -l app=cart
+- port forward grafana
+- enable/disable redis
+- warm cache if redis enabled
+- add tickets to db
+- note test start time stamp
+- start minikube tunnel
+
+start at:
+
+Postgres max connections: 100
+PgBouncer pool size: 50
+Postgres spiking at 30% CPU
+Postgres at 70% connection usage
+pgbouncer at 20% pool utilization
+throughput ~480 requests pr second
+
+postgres max connections: 150
+PgBouncer pool size: 100
+Postgres spiking at 30% CPU
+Postgres at 30% connection usage
+pgbouncer at 90% pool utilization
+throughput ~490 requests pr second
+
+postgres max connections: 250
+PgBouncer pool size: 200
+Postgres spiking at 30% CPU
+Postgres at 45% connection usage
+pgbouncer at 110% pool utilization
+throughput ~490 requests pr second
+
+
+⏺ Two different things at two different hops:
+
+  cart 3 replicas with 4 workers each with 3 client connections each (408 client conns) → pgbouncer → postgres (server conns)
+
+  - max_client_conn = 2000 — pgbouncer accepts up to 2000 connections from apps (cart side)
+  - max_connections = 250 — postgres accepts up to 250 connections from pgbouncer (server side)
+
+  pgbouncer's job is to multiplex those 408 cart client connections into at most default_pool_size 
+  = 200 actual postgres server connections. Postgres never sees 408 — it sees at most 200 from
+  pgbouncer plus a handful from exporters.
+
+  So both numbers are correct and consistent.
+
+PG bouncer accepts up to 2000 client connections
+Postgres accepts at most 250 server connections from pgbouncer (bouncer acts as a limiter and multiplexer)
+Need to decide on a good amout of workers pr replica and client connections pr worker to optimize throughput while avoiding connection bottlenecks at pgbouncer and postgres.

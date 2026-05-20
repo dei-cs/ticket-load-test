@@ -15,7 +15,6 @@ TAG=$(git rev-parse --short HEAD)
 # Format: "service_name:path_to_docker_context"
 
 services=(
-"user-generator:./user-generator"
 "ticket-info:./ticket-info"
 "cart:./cart"
 "ticket-manager:./ticket-manager"

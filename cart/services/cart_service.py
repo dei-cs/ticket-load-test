@@ -29,8 +29,12 @@ class TicketDoubleBookingError(Exception):
 
 
 class CartService:
-    def __init__(self, pool: asyncpg.Pool):
+    REDIS_KEY = "tickets:available_ids"
+    _MAX_RETRIES = 3
+
+    def __init__(self, pool: asyncpg.Pool, redis=None):
         self._pool = pool
+        self._redis = redis
 
 
     async def reserve_ticket_batch_atomic_with_locking(self, count: int, owner: str) -> [int]:
@@ -47,7 +51,6 @@ class CartService:
                         WITH grabbed AS (
                             SELECT id FROM tickets
                             WHERE state = 'available'
-                            ORDER BY id
                             LIMIT $1
                             FOR UPDATE SKIP LOCKED
                         )
@@ -72,6 +75,47 @@ class CartService:
             reservation_results.add(1, result_attributes)
             reservation_duration.record(perf_counter() - started_at, result_attributes)
 
+
+    async def reserve_ticket_batch_redis(self, count: int, owner: str) -> list[int]:
+        attributes = {"strategy": "redis"}
+        reservation_attempts.add(1, attributes)
+        started_at = perf_counter()
+        result = "error"
+
+        try:
+            reserved = []
+            retries = 0
+
+            while len(reserved) < count:
+                raw = await self._redis.lpop(self.REDIS_KEY)
+                if raw is None:
+                    result = "no_tickets_available"
+                    raise NoTicketsAvailableError(requested=count, last_checked=utcnow())
+
+                async with self._pool.acquire() as conn:
+                    rows = await conn.fetch(
+                        """
+                        UPDATE tickets
+                        SET state = 'reserved', owner = $2, reserved_at = $3
+                        WHERE id = $1 AND state = 'available'
+                        RETURNING id
+                        """,
+                        int(raw), owner, utcnow(),
+                    )
+                    if rows:
+                        reserved.extend(row["id"] for row in rows)
+                    else:
+                        retries += 1
+                        if retries >= self._MAX_RETRIES:
+                            result = "no_tickets_available"
+                            raise NoTicketsAvailableError(requested=count, last_checked=utcnow())
+
+            result = "success"
+            return reserved
+        finally:
+            result_attributes = attributes | {"result": result}
+            reservation_results.add(1, result_attributes)
+            reservation_duration.record(perf_counter() - started_at, result_attributes)
 
     async def reserve_ticket_batch_no_locking(self, count: int, owner: str) -> [int]:
         attributes = {"strategy": "unsafe"}

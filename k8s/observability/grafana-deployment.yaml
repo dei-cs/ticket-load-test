@@ -25,16 +25,16 @@ spec:
             - name: grafana-dashboard-provider
               mountPath: /etc/grafana/provisioning/dashboards
               readOnly: true
-            - name: grafana-postgres-dashboard
+            - name: grafana-dashboards
               mountPath: /var/lib/grafana/dashboards
               readOnly: true
           resources:
             requests:
-              cpu: 100m
-              memory: 256Mi
-            limits:
-              cpu: 500m
+              cpu: 200m
               memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
       volumes:
         - name: grafana-datasources
           configMap:
@@ -42,6 +42,8 @@ spec:
         - name: grafana-dashboard-provider
           configMap:
             name: grafana-dashboard-provider
-        - name: grafana-postgres-dashboard
-          configMap:
-            name: grafana-postgres-dashboard
+        - name: grafana-dashboards
+          projected:
+            sources:
+              - configMap:
+                  name: grafana-combined-dashboard

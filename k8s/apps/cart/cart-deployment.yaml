@@ -31,6 +31,14 @@ spec:
                   key: DATABASE_URL
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "otel-collector:4317"
+            - name: DB_POOL_SIZE
+              value: "3"
+            - name: WORKERS
+              value: "4"
+            - name: REDIS_ENABLED
+              value: "true"
+            - name: REDIS_URL
+              value: "redis://redis:6379"
           livenessProbe:
             httpGet:
               path: /healthz
@@ -47,8 +55,8 @@ spec:
             failureThreshold: 3
           resources:
             requests:
-              cpu: 200m
-              memory: 128Mi
+              cpu: 1000m
+              memory: 683Mi
             limits:
-              cpu: 750m
-              memory: 256Mi
+              cpu: 1000m
+              memory: 683Mi

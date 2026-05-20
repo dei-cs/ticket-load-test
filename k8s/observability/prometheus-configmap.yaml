@@ -20,3 +20,23 @@ data:
       - job_name: "pgbouncer-exporter"
         static_configs:
           - targets: ["pgbouncer-exporter:9127"]
+
+      - job_name: "redis-exporter"
+        static_configs:
+          - targets: ["redis-exporter:9121"]
+
+      - job_name: "cadvisor"
+        kubernetes_sd_configs:
+          - role: node
+        scheme: https
+        tls_config:
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        metrics_path: /metrics/cadvisor
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+        metric_relabel_configs:
+          - source_labels: [id]
+            regex: "/kubepods.*"
+            action: keep

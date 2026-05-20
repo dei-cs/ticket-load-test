@@ -31,6 +31,8 @@ spec:
                   key: DATABASE_URL
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "otel-collector:4317"
+            - name: REDIS_URL
+              value: "redis://redis:6379"
           livenessProbe:
             httpGet:
               path: /healthz

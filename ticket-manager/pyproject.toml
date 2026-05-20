@@ -15,4 +15,5 @@ dependencies = [
     "opentelemetry-sdk",
     "opentelemetry-exporter-otlp",
     "opentelemetry-instrumentation-fastapi",
+    "redis>=5.0.0",
 ]

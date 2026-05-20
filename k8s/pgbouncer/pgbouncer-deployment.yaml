@@ -39,10 +39,10 @@ spec:
             periodSeconds: 5
           resources:
             requests:
-              cpu: 100m
-              memory: 128Mi
+              cpu: 1000m
+              memory: 256Mi
             limits:
-              cpu: 500m
+              cpu: 1000m
               memory: 256Mi
       volumes:
         - name: pgbouncer-ini

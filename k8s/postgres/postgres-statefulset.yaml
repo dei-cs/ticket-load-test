@@ -52,16 +52,22 @@ spec:
             failureThreshold: 5
           args:
             - "-c"
-            - "max_connections=500"
+            - "max_connections=250"
             - "-c"
-            - "shared_buffers=512MB"
+            - "shared_buffers=2048MB"
+            - "-c"
+            - "synchronous_commit=off"
+            - "-c"
+            - "checkpoint_completion_target=0.9"
+            - "-c"
+            - "max_wal_size=2GB"
           resources:
             requests:
-              cpu: 500m
-              memory: 1Gi
+              cpu: 2500m
+              memory: 6Gi
             limits:
-              cpu: 3000m
-              memory: 4Gi
+              cpu: 2500m
+              memory: 6Gi
       volumes:
         - name: postgres-data
           persistentVolumeClaim:
