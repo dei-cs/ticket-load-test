@@ -11,7 +11,7 @@ data:
       "tags": ["ticket-load-test"],
       "timezone": "browser",
       "schemaVersion": 39,
-      "version": 2,
+      "version": 8,
       "refresh": "5s",
       "editable": true,
       "graphTooltip": 0,
@@ -40,22 +40,6 @@ data:
           "gridPos": { "h": 8, "w": 24, "x": 0, "y": 1 }
         },
         {
-          "id": 2,
-          "type": "stat",
-          "title": "Total RPS",
-          "description": "Average requests per second processed over the selected time window. Healthy: scales proportionally with virtual users. Warning: if RPS plateaus while active requests keep growing, something is bottlenecked. Cross-reference: Active requests (flat RPS + growing active count = saturation), p95 latency (rising latency alongside flat RPS = service under stress), Connections by state (RPS stalling while idle postgres connections grow = the DB is the bottleneck).",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "targets": [{ "refId": "A", "expr": "sum(rate(http_server_duration_milliseconds_count[1m]))" }],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "reqps",
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
-            }
-          },
-          "options": { "reduceOptions": { "calcs": ["mean"] }, "colorMode": "background" },
-          "gridPos": { "h": 6, "w": 8, "x": 0, "y": 9 }
-        },
-        {
           "id": 3,
           "type": "stat",
           "title": "p50 latency",
@@ -69,7 +53,7 @@ data:
             }
           },
           "options": { "reduceOptions": { "calcs": ["mean"] }, "colorMode": "background" },
-          "gridPos": { "h": 6, "w": 8, "x": 8, "y": 9 }
+          "gridPos": { "h": 6, "w": 12, "x": 0, "y": 9 }
         },
         {
           "id": 4,
@@ -85,7 +69,7 @@ data:
             }
           },
           "options": { "reduceOptions": { "calcs": ["mean"] }, "colorMode": "background" },
-          "gridPos": { "h": 6, "w": 8, "x": 16, "y": 9 }
+          "gridPos": { "h": 6, "w": 12, "x": 12, "y": 9 }
         },
         {
           "id": 5,
@@ -98,102 +82,156 @@ data:
           "id": 6,
           "type": "timeseries",
           "title": "Cart: CPU % of limit",
-          "description": "CPU usage of all cart pods combined as a % of the total CPU limit for the 3-replica profile (3 × 1.7 cores = 5.1 cores). Above 80% = cart replicas are CPU-constrained. Above 95% = CPU throttling is adding latency to every request. Fix: scale replicas or optimize application code. Cross-reference: Total RPS (if RPS stalls when this hits 80%, cart CPU is the hard ceiling), Active requests (rising active count + high CPU = CPU-bound saturation), Postgres CPU % (if both are high simultaneously, load is hitting both layers).",
+          "description": "CPU usage of all cart pods combined as a % of their total configured CPU limit. Denominator is read live from kube-state-metrics (kube_pod_container_resource_limits), so it auto-tracks the active profile (replica count and per-pod limit set by set-cart-profile.zsh / set-resource-split.zsh). Above 80% = cart replicas are CPU-constrained. Above 95% = CPU throttling is adding latency to every request. Fix: scale replicas or optimize application code. Cross-reference: Total RPS (if RPS stalls when this hits 80%, cart CPU is the hard ceiling), Active requests (rising active count + high CPU = CPU-bound saturation), Postgres CPU % (if both are high simultaneously, load is hitting both layers).",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "targets": [{ "refId": "A", "expr": "100 * sum(rate(container_cpu_usage_seconds_total{namespace=\"ticket-system\", pod=~\"cart-.*\", container=\"\"}[1m])) / 5.0", "legendFormat": "cart" }],
+          "targets": [
+            { "refId": "A", "expr": "100 * sum(rate(container_cpu_usage_seconds_total{namespace=\"ticket-system\", pod=~\"cart-.*\", container=\"\"}[1m])) / sum(kube_pod_container_resource_limits{namespace=\"ticket-system\", pod=~\"cart-.*\", resource=\"cpu\"})", "legendFormat": "% of limit" },
+            { "refId": "B", "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"ticket-system\", pod=~\"cart-.*\", container=\"\"}[1m]))", "legendFormat": "used (cores)" },
+            { "refId": "C", "expr": "sum(kube_pod_container_resource_limits{namespace=\"ticket-system\", pod=~\"cart-.*\", resource=\"cpu\"})", "legendFormat": "limit (cores)" }
+          ],
           "fieldConfig": {
             "defaults": {
               "unit": "percent",
               "min": 0,
-              "custom": { "fillOpacity": 10 },
+              "custom": { "fillOpacity": 10, "axisPlacement": "left" },
               "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 80 }, { "color": "red", "value": 95 }] }
-            }
+            },
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "used (cores)" }, "properties": [{ "id": "unit", "value": "short" }, { "id": "custom.axisPlacement", "value": "right" }, { "id": "custom.axisLabel", "value": "cores" }, { "id": "custom.fillOpacity", "value": 0 }] },
+              { "matcher": { "id": "byName", "options": "limit (cores)" }, "properties": [{ "id": "unit", "value": "short" }, { "id": "custom.axisPlacement", "value": "right" }, { "id": "custom.axisLabel", "value": "cores" }, { "id": "custom.fillOpacity", "value": 0 }, { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } }] }
+            ]
           },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] } },
           "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 }
         },
         {
           "id": 7,
           "type": "timeseries",
           "title": "Postgres: CPU % of limit",
-          "description": "CPU usage of the postgres pod as a % of its limit (2.0 cores). High CPU with many active connections = too many concurrent queries. High CPU with few connections = expensive queries (full table scans, missing indexes). Cross-reference: Buffer cache hit ratio (low cache hit + high CPU = disk reads are making queries expensive), Lock waiters (lock contention forces queries to wait and burns CPU), Connections by state (many 'active' state connections = high concurrent query load).",
+          "description": "CPU usage of the postgres pod as a % of its configured CPU limit. Denominator is read live from kube-state-metrics (kube_pod_container_resource_limits), so it auto-tracks the CPU split set by set-resource-split.zsh — critical in Phase 1 where the postgres share varies (4000/3500/3000/2500m). High CPU with many active connections = too many concurrent queries. High CPU with few connections = expensive queries (full table scans, missing indexes). Cross-reference: Buffer cache hit ratio (low cache hit + high CPU = disk reads are making queries expensive), Lock waiters (lock contention forces queries to wait and burns CPU), Connections by state (many 'active' state connections = high concurrent query load).",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "targets": [{ "refId": "A", "expr": "100 * sum(rate(container_cpu_usage_seconds_total{namespace=\"ticket-system\", pod=~\"postgres-.*\", container=\"\"}[1m])) / 2.0", "legendFormat": "postgres" }],
+          "targets": [
+            { "refId": "A", "expr": "100 * sum(rate(container_cpu_usage_seconds_total{namespace=\"ticket-system\", pod=~\"postgres-[^e].*\", container=\"\"}[1m])) / sum(kube_pod_container_resource_limits{namespace=\"ticket-system\", pod=~\"postgres-[^e].*\", resource=\"cpu\"})", "legendFormat": "% of limit" },
+            { "refId": "B", "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"ticket-system\", pod=~\"postgres-[^e].*\", container=\"\"}[1m]))", "legendFormat": "used (cores)" },
+            { "refId": "C", "expr": "sum(kube_pod_container_resource_limits{namespace=\"ticket-system\", pod=~\"postgres-[^e].*\", resource=\"cpu\"})", "legendFormat": "limit (cores)" }
+          ],
           "fieldConfig": {
             "defaults": {
               "unit": "percent",
               "min": 0,
-              "custom": { "fillOpacity": 10 },
+              "custom": { "fillOpacity": 10, "axisPlacement": "left" },
               "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 80 }, { "color": "red", "value": 95 }] }
-            }
+            },
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "used (cores)" }, "properties": [{ "id": "unit", "value": "short" }, { "id": "custom.axisPlacement", "value": "right" }, { "id": "custom.axisLabel", "value": "cores" }, { "id": "custom.fillOpacity", "value": 0 }] },
+              { "matcher": { "id": "byName", "options": "limit (cores)" }, "properties": [{ "id": "unit", "value": "short" }, { "id": "custom.axisPlacement", "value": "right" }, { "id": "custom.axisLabel", "value": "cores" }, { "id": "custom.fillOpacity", "value": 0 }, { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } }] }
+            ]
           },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] } },
           "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 }
         },
         {
           "id": 8,
           "type": "timeseries",
           "title": "PgBouncer: CPU % of limit",
-          "description": "CPU usage of the pgbouncer pod as a % of its limit (0.5 cores). PgBouncer is a lightweight proxy and should rarely exceed 30% CPU. If it spikes, you have an extreme rate of connection open/close events (connection churn). Cross-reference: Pool utilization % (high pool util + high CPU = pgbouncer working hard to manage the pool), Clients waiting (CPU spike alongside waiting clients = pgbouncer itself may be saturated).",
+          "description": "CPU usage of the pgbouncer pod as a % of its configured CPU limit (read live from kube-state-metrics). PgBouncer is a lightweight proxy and should rarely exceed 30% CPU. If it spikes, you have an extreme rate of connection open/close events (connection churn). Cross-reference: Pool utilization % (high pool util + high CPU = pgbouncer working hard to manage the pool), Clients waiting (CPU spike alongside waiting clients = pgbouncer itself may be saturated).",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "targets": [{ "refId": "A", "expr": "100 * sum(rate(container_cpu_usage_seconds_total{namespace=\"ticket-system\", pod=~\"pgbouncer-.*\", container=\"\"}[1m])) / 0.5", "legendFormat": "pgbouncer" }],
+          "targets": [
+            { "refId": "A", "expr": "100 * sum(rate(container_cpu_usage_seconds_total{namespace=\"ticket-system\", pod=~\"pgbouncer-[^e].*\", container=\"\"}[1m])) / sum(kube_pod_container_resource_limits{namespace=\"ticket-system\", pod=~\"pgbouncer-[^e].*\", resource=\"cpu\"})", "legendFormat": "% of limit" },
+            { "refId": "B", "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"ticket-system\", pod=~\"pgbouncer-[^e].*\", container=\"\"}[1m]))", "legendFormat": "used (cores)" },
+            { "refId": "C", "expr": "sum(kube_pod_container_resource_limits{namespace=\"ticket-system\", pod=~\"pgbouncer-[^e].*\", resource=\"cpu\"})", "legendFormat": "limit (cores)" }
+          ],
           "fieldConfig": {
             "defaults": {
               "unit": "percent",
               "min": 0,
-              "custom": { "fillOpacity": 10 },
+              "custom": { "fillOpacity": 10, "axisPlacement": "left" },
               "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 80 }, { "color": "red", "value": 95 }] }
-            }
+            },
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "used (cores)" }, "properties": [{ "id": "unit", "value": "short" }, { "id": "custom.axisPlacement", "value": "right" }, { "id": "custom.axisLabel", "value": "cores" }, { "id": "custom.fillOpacity", "value": 0 }] },
+              { "matcher": { "id": "byName", "options": "limit (cores)" }, "properties": [{ "id": "unit", "value": "short" }, { "id": "custom.axisPlacement", "value": "right" }, { "id": "custom.axisLabel", "value": "cores" }, { "id": "custom.fillOpacity", "value": 0 }, { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } }] }
+            ]
           },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] } },
           "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 }
         },
         {
           "id": 9,
           "type": "timeseries",
           "title": "Cart: Memory % of limit",
-          "description": "Memory working set of all cart pods combined as a % of the total memory limit (3-replica: 3 × 1.3Gi = 3.9Gi). Near 95% = Kubernetes may OOM-kill pods, causing restarts and dropped requests. Cross-reference: Cart CPU % (both rising together = cart is fully saturated, scale replicas), Memory by pod (check if load is evenly distributed or one replica is using much more memory than others).",
+          "description": "Memory working set of all cart pods combined as a % of their total configured memory limit (read live from kube-state-metrics, kube_pod_container_resource_limits), so it auto-tracks the active replica profile. Near 95% = Kubernetes may OOM-kill pods, causing restarts and dropped requests. Cross-reference: Cart CPU % (both rising together = cart is fully saturated, scale replicas), Memory by pod (check if load is evenly distributed or one replica is using much more memory than others).",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "targets": [{ "refId": "A", "expr": "100 * sum(container_memory_working_set_bytes{namespace=\"ticket-system\", pod=~\"cart-.*\", container=\"\"}) / 7077888000", "legendFormat": "cart" }],
+          "targets": [
+            { "refId": "A", "expr": "100 * sum(container_memory_working_set_bytes{namespace=\"ticket-system\", pod=~\"cart-.*\", container=\"\"}) / sum(kube_pod_container_resource_limits{namespace=\"ticket-system\", pod=~\"cart-.*\", resource=\"memory\"})", "legendFormat": "% of limit" },
+            { "refId": "B", "expr": "sum(container_memory_working_set_bytes{namespace=\"ticket-system\", pod=~\"cart-.*\", container=\"\"})", "legendFormat": "used (bytes)" },
+            { "refId": "C", "expr": "sum(kube_pod_container_resource_limits{namespace=\"ticket-system\", pod=~\"cart-.*\", resource=\"memory\"})", "legendFormat": "limit (bytes)" }
+          ],
           "fieldConfig": {
             "defaults": {
               "unit": "percent",
               "min": 0,
-              "custom": { "fillOpacity": 10 },
+              "custom": { "fillOpacity": 10, "axisPlacement": "left" },
               "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 80 }, { "color": "red", "value": 95 }] }
-            }
+            },
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "used (bytes)" }, "properties": [{ "id": "unit", "value": "bytes" }, { "id": "custom.axisPlacement", "value": "right" }, { "id": "custom.axisLabel", "value": "bytes" }, { "id": "custom.fillOpacity", "value": 0 }] },
+              { "matcher": { "id": "byName", "options": "limit (bytes)" }, "properties": [{ "id": "unit", "value": "bytes" }, { "id": "custom.axisPlacement", "value": "right" }, { "id": "custom.axisLabel", "value": "bytes" }, { "id": "custom.fillOpacity", "value": 0 }, { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } }] }
+            ]
           },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] } },
           "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 }
         },
         {
           "id": 10,
           "type": "timeseries",
           "title": "Postgres: Memory % of limit",
-          "description": "Memory working set of the postgres pod as a % of its limit (6Gi). Postgres uses memory for shared_buffers (the data cache) and work_mem (sort and join operations). High memory + high buffer cache hit ratio = postgres is caching data efficiently. Near 95% = OOM risk. Cross-reference: Buffer cache hit ratio (low hit ratio despite high memory = shared_buffers may be misconfigured relative to working set size), Postgres CPU % (both high = postgres is under heavy query load).",
+          "description": "Memory working set of the postgres pod as a % of its configured memory limit (read live from kube-state-metrics, kube_pod_container_resource_limits). Postgres uses memory for shared_buffers (the data cache) and work_mem (sort and join operations). High memory + high buffer cache hit ratio = postgres is caching data efficiently. Near 95% = OOM risk. Cross-reference: Buffer cache hit ratio (low hit ratio despite high memory = shared_buffers may be misconfigured relative to working set size), Postgres CPU % (both high = postgres is under heavy query load).",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "targets": [{ "refId": "A", "expr": "100 * sum(container_memory_working_set_bytes{namespace=\"ticket-system\", pod=~\"postgres-.*\", container=\"\"}) / 6442450944", "legendFormat": "postgres" }],
+          "targets": [
+            { "refId": "A", "expr": "100 * sum(container_memory_working_set_bytes{namespace=\"ticket-system\", pod=~\"postgres-[^e].*\", container=\"\"}) / sum(kube_pod_container_resource_limits{namespace=\"ticket-system\", pod=~\"postgres-[^e].*\", resource=\"memory\"})", "legendFormat": "% of limit" },
+            { "refId": "B", "expr": "sum(container_memory_working_set_bytes{namespace=\"ticket-system\", pod=~\"postgres-[^e].*\", container=\"\"})", "legendFormat": "used (bytes)" },
+            { "refId": "C", "expr": "sum(kube_pod_container_resource_limits{namespace=\"ticket-system\", pod=~\"postgres-[^e].*\", resource=\"memory\"})", "legendFormat": "limit (bytes)" }
+          ],
           "fieldConfig": {
             "defaults": {
               "unit": "percent",
               "min": 0,
-              "custom": { "fillOpacity": 10 },
+              "custom": { "fillOpacity": 10, "axisPlacement": "left" },
               "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 80 }, { "color": "red", "value": 95 }] }
-            }
+            },
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "used (bytes)" }, "properties": [{ "id": "unit", "value": "bytes" }, { "id": "custom.axisPlacement", "value": "right" }, { "id": "custom.axisLabel", "value": "bytes" }, { "id": "custom.fillOpacity", "value": 0 }] },
+              { "matcher": { "id": "byName", "options": "limit (bytes)" }, "properties": [{ "id": "unit", "value": "bytes" }, { "id": "custom.axisPlacement", "value": "right" }, { "id": "custom.axisLabel", "value": "bytes" }, { "id": "custom.fillOpacity", "value": 0 }, { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } }] }
+            ]
           },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] } },
           "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 }
         },
         {
           "id": 11,
           "type": "timeseries",
           "title": "PgBouncer: Memory % of limit",
-          "description": "Memory usage of the pgbouncer pod as a % of its limit (256Mi). Should be very stable throughout a load test. A sudden jump indicates far more active connections than expected. Cross-reference: Clients waiting (memory spike + many waiting clients = connection pool storm), Pool utilization % (high pool util confirms the pool is under pressure).",
+          "description": "Memory usage of the pgbouncer pod as a % of its configured memory limit (read live from kube-state-metrics, kube_pod_container_resource_limits). Should be very stable throughout a load test. A sudden jump indicates far more active connections than expected. Cross-reference: Clients waiting (memory spike + many waiting clients = connection pool storm), Pool utilization % (high pool util confirms the pool is under pressure).",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "targets": [{ "refId": "A", "expr": "100 * sum(container_memory_working_set_bytes{namespace=\"ticket-system\", pod=~\"pgbouncer-.*\", container=\"\"}) / 268435456", "legendFormat": "pgbouncer" }],
+          "targets": [
+            { "refId": "A", "expr": "100 * sum(container_memory_working_set_bytes{namespace=\"ticket-system\", pod=~\"pgbouncer-[^e].*\", container=\"\"}) / sum(kube_pod_container_resource_limits{namespace=\"ticket-system\", pod=~\"pgbouncer-[^e].*\", resource=\"memory\"})", "legendFormat": "% of limit" },
+            { "refId": "B", "expr": "sum(container_memory_working_set_bytes{namespace=\"ticket-system\", pod=~\"pgbouncer-[^e].*\", container=\"\"})", "legendFormat": "used (bytes)" },
+            { "refId": "C", "expr": "sum(kube_pod_container_resource_limits{namespace=\"ticket-system\", pod=~\"pgbouncer-[^e].*\", resource=\"memory\"})", "legendFormat": "limit (bytes)" }
+          ],
           "fieldConfig": {
             "defaults": {
               "unit": "percent",
               "min": 0,
-              "custom": { "fillOpacity": 10 },
+              "custom": { "fillOpacity": 10, "axisPlacement": "left" },
               "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 80 }, { "color": "red", "value": 95 }] }
-            }
+            },
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "used (bytes)" }, "properties": [{ "id": "unit", "value": "bytes" }, { "id": "custom.axisPlacement", "value": "right" }, { "id": "custom.axisLabel", "value": "bytes" }, { "id": "custom.fillOpacity", "value": 0 }] },
+              { "matcher": { "id": "byName", "options": "limit (bytes)" }, "properties": [{ "id": "unit", "value": "bytes" }, { "id": "custom.axisPlacement", "value": "right" }, { "id": "custom.axisLabel", "value": "bytes" }, { "id": "custom.fillOpacity", "value": 0 }, { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } }] }
+            ]
           },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] } },
           "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 }
         },
         {
@@ -209,7 +247,7 @@ data:
           "title": "CPU cores by pod",
           "description": "Absolute CPU cores consumed per individual pod (not normalized to limits). Use this after checking the CPU % panels to see whether load is evenly distributed across replicas. Uneven distribution across cart replicas suggests sticky sessions or routing imbalance — one pod is doing most of the work. Cross-reference: Cart CPU % (same data as a percentage of limit), Memory by pod (view both together for a complete resource picture per pod).",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "targets": [{ "refId": "A", "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"ticket-system\", container=\"\"}[1m]))", "legendFormat": "{{pod}}" }],
+          "targets": [{ "refId": "A", "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"ticket-system\", container=\"\", pod=~\"(cart|postgres|pgbouncer|redis)-.*\", pod!~\".*exporter.*\"}[1m]))", "legendFormat": "{{pod}}" }],
           "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 5 } } },
           "gridPos": { "h": 8, "w": 12, "x": 0, "y": 33 }
         },
@@ -219,7 +257,7 @@ data:
           "title": "Memory by pod",
           "description": "Absolute memory working set per individual pod in bytes. Compare pods of the same type — if one cart replica uses significantly more memory than others, it may have a memory leak or be holding more session state. A healthy pod's memory grows during load and stabilizes after. Memory that keeps growing after load ends = memory leak. Cross-reference: Cart Memory %, CPU cores by pod.",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "targets": [{ "refId": "A", "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"ticket-system\", container=\"\"})", "legendFormat": "{{pod}}" }],
+          "targets": [{ "refId": "A", "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"ticket-system\", container=\"\", pod=~\"(cart|postgres|pgbouncer|redis)-.*\", pod!~\".*exporter.*\"})", "legendFormat": "{{pod}}" }],
           "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "fillOpacity": 5 } } },
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 33 }
         },
@@ -324,7 +362,7 @@ data:
             }
           },
           "options": { "reduceOptions": { "calcs": ["mean"] } },
-          "gridPos": { "h": 4, "w": 4, "x": 0, "y": 59 }
+          "gridPos": { "h": 8, "w": 4, "x": 0, "y": 59 }
         },
         {
           "id": 23,
@@ -340,7 +378,7 @@ data:
             }
           },
           "options": { "reduceOptions": { "calcs": ["mean"] } },
-          "gridPos": { "h": 4, "w": 4, "x": 4, "y": 59 }
+          "gridPos": { "h": 8, "w": 4, "x": 4, "y": 59 }
         },
         {
           "id": 24,
@@ -358,28 +396,13 @@ data:
             }
           },
           "options": { "reduceOptions": { "calcs": ["mean"] } },
-          "gridPos": { "h": 12, "w": 16, "x": 8, "y": 59 }
-        },
-        {
-          "id": 25,
-          "type": "timeseries",
-          "title": "Clients waiting",
-          "description": "Number of application connections currently queued at PgBouncer waiting for a free server-side connection slot over time. Any non-zero value means PgBouncer — not postgres — is the bottleneck. The fix is increasing pool_size in pgbouncer config, not adding postgres resources. Cross-reference: Pool utilization % (must be near 100% for clients to be waiting), Postgres CPU % (low postgres CPU while clients wait = pool is too small, not a DB performance issue), p95 latency (each second clients wait adds directly to request latency).",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "targets": [{ "refId": "A", "expr": "sum(pgbouncer_pools_client_waiting_connections{database=\"ticketmanagerdb\"})", "legendFormat": "waiting" }],
-          "fieldConfig": {
-            "defaults": {
-              "custom": { "fillOpacity": 10 },
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 10 }] }
-            }
-          },
-          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 63 }
+          "gridPos": { "h": 8, "w": 16, "x": 8, "y": 59 }
         },
         {
           "id": 26,
           "type": "timeseries",
           "title": "PgBouncer pool connections",
-          "description": "Full picture of connection states across the PgBouncer pool over time. 'client active' = app requests currently being served. 'client waiting' = app requests queued for a free slot. 'server active' = postgres backend connections in use. 'server idle' = postgres connections held open but unused (this is the pool's headroom). Healthy: server_idle > 0. Saturation: client_waiting rises while server_active is pegged at the pool_size ceiling and server_idle drops to 0. Cross-reference: Clients waiting (same client_waiting data, easier to read spike shape), Pool utilization % (summary gauge of server_active vs pool_size).",
+          "description": "Full picture of connection states across the PgBouncer pool over time. 'client active' = app requests currently being served. 'client waiting' = app requests queued for a free slot. 'server active' = postgres backend connections in use. 'server idle' = postgres connections held open but unused (this is the pool's headroom). Healthy: server_idle > 0. Saturation: client_waiting rises while server_active is pegged at the pool_size ceiling and server_idle drops to 0 — this is the primary 'PgBouncer is the bottleneck' signal (formerly its own Clients-waiting panel). Cross-reference: Pool utilization % (summary gauge of server_active vs pool_size), Max client wait (how long the queued clients wait).",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             { "refId": "A", "expr": "sum(pgbouncer_pools_client_active_connections{database=\"ticketmanagerdb\"})", "legendFormat": "client active" },
@@ -387,14 +410,14 @@ data:
             { "refId": "C", "expr": "sum(pgbouncer_pools_server_active_connections{database=\"ticketmanagerdb\"})", "legendFormat": "server active" },
             { "refId": "D", "expr": "sum(pgbouncer_pools_server_idle_connections{database=\"ticketmanagerdb\"})", "legendFormat": "server idle" }
           ],
-          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 71 }
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 67 }
         },
         {
           "id": 27,
           "type": "row",
-          "title": "Postgres Connection Health",
+          "title": "Postgres Connection & Write Health",
           "collapsed": false,
-          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 79 }
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 75 }
         },
         {
           "id": 28,
@@ -409,7 +432,7 @@ data:
               "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 3 }, { "color": "red", "value": 10 }] }
             }
           },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 80 }
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 76 }
         },
         {
           "id": 29,
@@ -424,28 +447,28 @@ data:
               "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 }] }
             }
           },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 80 }
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 76 }
         },
         {
-          "id": 30,
-          "type": "stat",
-          "title": "Max transaction age (s)",
-          "description": "Age in seconds of the longest currently open active transaction. A transaction that stays open holds its row locks for that entire duration, blocking other transactions from accessing the same rows. Above 30s = likely a slow or stuck query. Above 120s = almost certainly a stuck transaction that should be investigated or killed. Cross-reference: Idle in transaction (stuck transactions are often in 'idle in transaction' state), Lock waiters (the transaction with the highest age is likely the one blocking the most other connections).",
+          "id": 40,
+          "type": "timeseries",
+          "title": "Postgres: Checkpoint & write pressure",
+          "description": "WAL-driven checkpoint and buffer-flush pressure (per-second rates from pg_stat_bgwriter). 'checkpoints requested/s' climbing above 'scheduled/s' = checkpoints forced by WAL volume rather than the timed interval — sustained write pressure. 'buffers @backend/s' rising = the checkpointer/bgwriter cannot flush dirty pages fast enough, so query backends flush their own, stealing CPU and disk IO from request handling. 'backend fsync/s' should stay 0; non-zero = fsync stalls, a hard IO ceiling. Phase 4 (RQ4) use: if throughput plateaus while Postgres CPU % (id 7) is below 100% AND PgBouncer pool (id 24) is not saturated, a rising requested-checkpoint or backend-buffer rate identifies WAL/checkpoint disk IO as the scaling ceiling. Note: synchronous_commit=off removes the per-commit WAL fsync wait but not this checkpoint-flush pressure.",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "targets": [{ "refId": "A", "expr": "pg_connection_health_max_tx_age_seconds" }],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "s",
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 30 }, { "color": "red", "value": 120 }] }
-            }
-          },
-          "options": { "reduceOptions": { "calcs": ["mean"] } },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 88 }
+          "targets": [
+            { "refId": "A", "expr": "rate(pg_bgwriter_health_checkpoints_req[1m])", "legendFormat": "checkpoints requested/s" },
+            { "refId": "B", "expr": "rate(pg_bgwriter_health_checkpoints_timed[1m])", "legendFormat": "checkpoints scheduled/s" },
+            { "refId": "C", "expr": "rate(pg_bgwriter_health_buffers_checkpoint[1m])", "legendFormat": "buffers via checkpoint/s" },
+            { "refId": "D", "expr": "rate(pg_bgwriter_health_buffers_backend[1m])", "legendFormat": "buffers via backend/s" },
+            { "refId": "E", "expr": "rate(pg_bgwriter_health_buffers_backend_fsync[1m])", "legendFormat": "backend fsync/s" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short", "min": 0, "custom": { "fillOpacity": 5 } } },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 84 }
         },
         {
           "id": 31,
           "type": "row",
-          "title": "Query Performance & Redis",
+          "title": "Query Performance",
           "collapsed": false,
           "gridPos": { "h": 1, "w": 24, "x": 0, "y": 92 }
         },
@@ -471,30 +494,7 @@ data:
             }
           },
           "options": { "reduceOptions": { "calcs": ["mean"] } },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 93 }
-        },
-        {
-          "id": 34,
-          "type": "gauge",
-          "title": "Redis: Cache hit ratio",
-          "description": "Percentage of Redis key lookups that found the key (hit) vs failed and fell through to Postgres (miss). A healthy cache serves 90%+ of reads from Redis, protecting Postgres from read load. When this drops, Postgres absorbs the extra read traffic directly. Causes of misses: cache keys expired too quickly, working set is larger than Redis memory, or cache was not warmed up at the start of the test. Cross-reference: Postgres Transactions/sec (if Redis hit ratio drops, postgres TPS should spike proportionally as more reads hit the DB), Total RPS (high traffic with low Redis hit ratio = postgres is handling nearly all reads), Postgres CPU % (redis misses increase postgres query load).",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "100 * redis_keyspace_hits_total / clamp_min(redis_keyspace_hits_total + redis_keyspace_misses_total, 1)"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "percent",
-              "min": 0,
-              "max": 100,
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 80 }, { "color": "green", "value": 90 }] }
-            }
-          },
-          "options": { "reduceOptions": { "values": false, "calcs": ["mean"], "fields": "" }, "orientation": "auto", "showThresholdLabels": false, "showThresholdMarkers": true },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 93 }
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 93 }
         },
         {
           "id": 35,
@@ -507,34 +507,52 @@ data:
           "id": 36,
           "type": "timeseries",
           "title": "Redis: CPU % of limit",
-          "description": "CPU usage of the Redis pod as a % of its 500m limit. Redis is single-threaded for commands — if CPU hits 100%, Redis itself is the bottleneck and LPOP ops will queue. Cross-reference: Redis LPOP rate (if LPOP rate flatlines with CPU at 100%, Redis is the ceiling), Total RPS.",
+          "description": "CPU usage of the Redis pod as a % of its configured CPU limit (read live from kube-state-metrics). Redis is single-threaded for commands — if CPU hits 100%, Redis itself is the bottleneck and LPOP ops will queue. Cross-reference: Redis LPOP rate (if LPOP rate flatlines with CPU at 100%, Redis is the ceiling), Total RPS.",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "targets": [{ "refId": "A", "expr": "100 * sum(rate(container_cpu_usage_seconds_total{namespace=\"ticket-system\", pod=~\"redis-[^e].*\", container=\"\"}[1m])) / 0.5", "legendFormat": "redis" }],
+          "targets": [
+            { "refId": "A", "expr": "100 * sum(rate(container_cpu_usage_seconds_total{namespace=\"ticket-system\", pod=~\"redis-[^e].*\", container=\"\"}[1m])) / sum(kube_pod_container_resource_limits{namespace=\"ticket-system\", pod=~\"redis-[^e].*\", resource=\"cpu\"})", "legendFormat": "% of limit" },
+            { "refId": "B", "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"ticket-system\", pod=~\"redis-[^e].*\", container=\"\"}[1m]))", "legendFormat": "used (cores)" },
+            { "refId": "C", "expr": "sum(kube_pod_container_resource_limits{namespace=\"ticket-system\", pod=~\"redis-[^e].*\", resource=\"cpu\"})", "legendFormat": "limit (cores)" }
+          ],
           "fieldConfig": {
             "defaults": {
               "unit": "percent",
               "min": 0,
-              "custom": { "fillOpacity": 10 },
+              "custom": { "fillOpacity": 10, "axisPlacement": "left" },
               "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 90 }] }
-            }
+            },
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "used (cores)" }, "properties": [{ "id": "unit", "value": "short" }, { "id": "custom.axisPlacement", "value": "right" }, { "id": "custom.axisLabel", "value": "cores" }, { "id": "custom.fillOpacity", "value": 0 }] },
+              { "matcher": { "id": "byName", "options": "limit (cores)" }, "properties": [{ "id": "unit", "value": "short" }, { "id": "custom.axisPlacement", "value": "right" }, { "id": "custom.axisLabel", "value": "cores" }, { "id": "custom.fillOpacity", "value": 0 }, { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } }] }
+            ]
           },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] } },
           "gridPos": { "h": 8, "w": 8, "x": 0, "y": 102 }
         },
         {
           "id": 37,
           "type": "timeseries",
           "title": "Redis: Memory % of limit",
-          "description": "Memory used by Redis as a % of its 512Mi limit. Near 100% triggers eviction — Redis starts dropping keys. For tickets:available_ids list, eviction silently loses ticket IDs causing reservation failures even when tickets remain in Postgres. Cross-reference: Redis CPU % (both high = Redis fully saturated).",
+          "description": "Memory used by Redis as a % of its configured memory limit (read live from kube-state-metrics, kube_pod_container_resource_limits). Near 100% triggers eviction — Redis starts dropping keys. For tickets:available_ids list, eviction silently loses ticket IDs causing reservation failures even when tickets remain in Postgres. Cross-reference: Redis CPU % (both high = Redis fully saturated).",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "targets": [{ "refId": "A", "expr": "100 * sum(container_memory_working_set_bytes{namespace=\"ticket-system\", pod=~\"redis-[^e].*\", container=\"\"}) / 536870912", "legendFormat": "redis" }],
+          "targets": [
+            { "refId": "A", "expr": "100 * sum(container_memory_working_set_bytes{namespace=\"ticket-system\", pod=~\"redis-[^e].*\", container=\"\"}) / sum(kube_pod_container_resource_limits{namespace=\"ticket-system\", pod=~\"redis-[^e].*\", resource=\"memory\"})", "legendFormat": "% of limit" },
+            { "refId": "B", "expr": "sum(container_memory_working_set_bytes{namespace=\"ticket-system\", pod=~\"redis-[^e].*\", container=\"\"})", "legendFormat": "used (bytes)" },
+            { "refId": "C", "expr": "sum(kube_pod_container_resource_limits{namespace=\"ticket-system\", pod=~\"redis-[^e].*\", resource=\"memory\"})", "legendFormat": "limit (bytes)" }
+          ],
           "fieldConfig": {
             "defaults": {
               "unit": "percent",
               "min": 0,
-              "custom": { "fillOpacity": 10 },
+              "custom": { "fillOpacity": 10, "axisPlacement": "left" },
               "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 90 }] }
-            }
+            },
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "used (bytes)" }, "properties": [{ "id": "unit", "value": "bytes" }, { "id": "custom.axisPlacement", "value": "right" }, { "id": "custom.axisLabel", "value": "bytes" }, { "id": "custom.fillOpacity", "value": 0 }] },
+              { "matcher": { "id": "byName", "options": "limit (bytes)" }, "properties": [{ "id": "unit", "value": "bytes" }, { "id": "custom.axisPlacement", "value": "right" }, { "id": "custom.axisLabel", "value": "bytes" }, { "id": "custom.fillOpacity", "value": 0 }, { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } }] }
+            ]
           },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] } },
           "gridPos": { "h": 8, "w": 8, "x": 8, "y": 102 }
         },
         {

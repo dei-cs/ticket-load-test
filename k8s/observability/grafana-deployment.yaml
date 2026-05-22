@@ -5,6 +5,10 @@ metadata:
   namespace: ticket-system
 spec:
   replicas: 1
+  # Node is packed; a surging restart can't schedule a 2nd grafana pod.
+  # Recreate instead (grafana is idle during the measurement window).
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: grafana
@@ -30,7 +34,7 @@ spec:
               readOnly: true
           resources:
             requests:
-              cpu: 200m
+              cpu: 100m
               memory: 512Mi
             limits:
               cpu: 1000m

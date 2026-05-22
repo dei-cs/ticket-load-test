@@ -43,7 +43,7 @@ services:
       dockerfile: Dockerfile
     environment:
       DATABASE_URL: postgresql://devuser:devpassword123@postgres:5432/ticketmanagerdb
-      REDIS_ENABLED: "true"
+      REDIS_ENABLED: "false"
       REDIS_URL: redis://redis:6379
       REDIS_TTL_SECONDS: "5"
     ports:

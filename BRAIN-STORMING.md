@@ -121,7 +121,7 @@ Prometheus: http://<node-ip>:30001 (port 9090)
   - Database constraints and their role in ensuring data integrity and performance
   - Client connections constraints in our test setup
 
-Testing 100 iterations across 300000 tickets with 3000 concurrent users attempting to reserve.
+Testing 100 iterations with 2000 concurrent users (200000 total requests) attempting to reserve, across 300000 seeded tickets.
 
 before running a test run
 - run set-cart-profile.zsh

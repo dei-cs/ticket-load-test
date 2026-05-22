@@ -14,8 +14,8 @@ data:
     auth_type = scram-sha-256
     auth_file = /etc/pgbouncer/userlist.txt
     pool_mode = transaction
-    max_client_conn = 2000
-    default_pool_size = 200
+    max_client_conn = 1000
+    default_pool_size = 30
     reserve_pool_size = 20
     reserve_pool_timeout = 5
     server_idle_timeout = 600
