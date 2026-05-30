@@ -52,7 +52,7 @@ spec:
             failureThreshold: 5
           args:
             - "-c"
-            - "max_connections=100"
+            - "max_connections=200"
             - "-c"
             - "shared_buffers=2048MB"
             - "-c"
@@ -67,11 +67,11 @@ spec:
             - "work_mem=16MB"
           resources:
             requests:
-              cpu: 3000m
-              memory: 5Gi
+              cpu: 1000m
+              memory: 4Gi
             limits:
-              cpu: 3000m
-              memory: 5Gi
+              cpu: 1000m
+              memory: 4Gi
       volumes:
         - name: postgres-data
           persistentVolumeClaim:

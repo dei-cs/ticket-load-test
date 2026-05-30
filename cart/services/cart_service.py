@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from time import perf_counter
 
@@ -76,6 +77,17 @@ class CartService:
             reservation_duration.record(perf_counter() - started_at, result_attributes)
 
 
+    async def _repopulate_from_cache(self) -> int:
+        cached = await self._redis.get("tickets:available")
+        if not cached:
+            return 0
+        ids = json.loads(cached)
+        if ids:
+            await self._redis.delete(self.REDIS_KEY)
+            for i in range(0, len(ids), 1000):
+                await self._redis.rpush(self.REDIS_KEY, *ids[i:i+1000])
+        return len(ids)
+
     async def reserve_ticket_batch_redis(self, count: int, owner: str) -> list[int]:
         attributes = {"strategy": "redis"}
         reservation_attempts.add(1, attributes)
@@ -89,8 +101,11 @@ class CartService:
             while len(reserved) < count:
                 raw = await self._redis.lpop(self.REDIS_KEY)
                 if raw is None:
-                    result = "no_tickets_available"
-                    raise NoTicketsAvailableError(requested=count, last_checked=utcnow())
+                    refilled = await self._repopulate_from_cache()
+                    if refilled == 0:
+                        result = "no_tickets_available"
+                        raise NoTicketsAvailableError(requested=count, last_checked=utcnow())
+                    continue
 
                 async with self._pool.acquire() as conn:
                     rows = await conn.fetch(

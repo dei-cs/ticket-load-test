@@ -14,7 +14,7 @@ class Ticket(BaseModel):
     class Meta:
         table_name = 'tickets'
 
-    id = AutoField()
+    id = AutoField() # autofield auto generates primary key field with incrementing id
     event_type = TextField()
     owner = TextField(null=True)
     state = TextField() # available // reserved // sold

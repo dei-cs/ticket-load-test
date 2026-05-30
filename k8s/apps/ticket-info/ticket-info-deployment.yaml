@@ -33,7 +33,7 @@ spec:
                   name: postgres-secret
                   key: DIRECT_DATABASE_URL
             - name: REDIS_ENABLED
-              value: "false"
+              value: "true"
             - name: REDIS_URL
               value: "redis://redis:6379"
             - name: REDIS_TTL_SECONDS
