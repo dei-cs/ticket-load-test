@@ -4,7 +4,7 @@ metadata:
   name: cart
   namespace: ticket-system
 spec:
-  replicas: 3
+  replicas: 1
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -34,10 +34,8 @@ spec:
                 secretKeyRef:
                   name: postgres-secret
                   key: DATABASE_URL
-            - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "otel-collector:4317"
             - name: DB_POOL_SIZE
-              value: "150"
+              value: "140"
             - name: WORKERS
               value: "1"
             - name: REDIS_ENABLED
@@ -60,8 +58,8 @@ spec:
             failureThreshold: 3
           resources:
             requests:
-              cpu: 1300m
+              cpu: 4000m
               memory: 1Gi #2683Mi
             limits:
-              cpu: 1300m
+              cpu: 4000m
               memory: 1Gi #2683Mi

@@ -1,14 +1,7 @@
 import json
 from datetime import datetime
-from time import perf_counter
 
 import asyncpg
-
-from utils.telemetry import (
-    reservation_attempts,
-    reservation_duration,
-    reservation_results,
-)
 
 
 def utcnow():
@@ -39,42 +32,28 @@ class CartService:
 
 
     async def reserve_ticket_batch_atomic_with_locking(self, count: int, owner: str) -> [int]:
-        attributes = {"strategy": "locked"}
-        reservation_attempts.add(1, attributes)
-        started_at = perf_counter()
-        result = "error"
-
-        try:
-            async with self._pool.acquire() as conn:
-                async with conn.transaction():
-                    rows = await conn.fetch(
-                        """
-                        WITH grabbed AS (
-                            SELECT id FROM tickets
-                            WHERE state = 'available'
-                            LIMIT $1
-                            FOR UPDATE SKIP LOCKED
-                        )
-                        UPDATE tickets
-                        SET state = 'reserved', owner = $2, reserved_at = $3
-                        WHERE id IN (SELECT id FROM grabbed)
-                        RETURNING id
-                        """,
-                        count, owner, utcnow(),
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                rows = await conn.fetch(
+                    """
+                    WITH grabbed AS (
+                        SELECT id FROM tickets
+                        WHERE state = 'available'
+                        LIMIT $1
+                        FOR UPDATE SKIP LOCKED
                     )
+                    UPDATE tickets
+                    SET state = 'reserved', owner = $2, reserved_at = $3
+                    WHERE id IN (SELECT id FROM grabbed)
+                    RETURNING id
+                    """,
+                    count, owner, utcnow(),
+                )
 
-                    if not rows:
-                        result = "no_tickets_available"
-                        raise NoTicketsAvailableError(requested=count, last_checked=utcnow())
+                if not rows:
+                    raise NoTicketsAvailableError(requested=count, last_checked=utcnow())
 
-                    reserved_tickets = [row["id"] for row in rows]
-
-                result = "success"
-                return reserved_tickets
-        finally:
-            result_attributes = attributes | {"result": result}
-            reservation_results.add(1, result_attributes)
-            reservation_duration.record(perf_counter() - started_at, result_attributes)
+                return [row["id"] for row in rows]
 
 
     async def _repopulate_from_cache(self) -> int:
@@ -89,88 +68,62 @@ class CartService:
         return len(ids)
 
     async def reserve_ticket_batch_redis(self, count: int, owner: str) -> list[int]:
-        attributes = {"strategy": "redis"}
-        reservation_attempts.add(1, attributes)
-        started_at = perf_counter()
-        result = "error"
+        reserved = []
+        retries = 0
 
-        try:
-            reserved = []
-            retries = 0
+        while len(reserved) < count:
+            raw = await self._redis.lpop(self.REDIS_KEY)
+            if raw is None:
+                refilled = await self._repopulate_from_cache()
+                if refilled == 0:
+                    raise NoTicketsAvailableError(requested=count, last_checked=utcnow())
+                continue
 
-            while len(reserved) < count:
-                raw = await self._redis.lpop(self.REDIS_KEY)
-                if raw is None:
-                    refilled = await self._repopulate_from_cache()
-                    if refilled == 0:
-                        result = "no_tickets_available"
+            async with self._pool.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    UPDATE tickets
+                    SET state = 'reserved', owner = $2, reserved_at = $3
+                    WHERE id = $1 AND state = 'available'
+                    RETURNING id
+                    """,
+                    int(raw), owner, utcnow(),
+                )
+                if rows:
+                    reserved.extend(row["id"] for row in rows)
+                else:
+                    retries += 1
+                    if retries >= self._MAX_RETRIES:
                         raise NoTicketsAvailableError(requested=count, last_checked=utcnow())
-                    continue
 
-                async with self._pool.acquire() as conn:
-                    rows = await conn.fetch(
-                        """
-                        UPDATE tickets
-                        SET state = 'reserved', owner = $2, reserved_at = $3
-                        WHERE id = $1 AND state = 'available'
-                        RETURNING id
-                        """,
-                        int(raw), owner, utcnow(),
-                    )
-                    if rows:
-                        reserved.extend(row["id"] for row in rows)
-                    else:
-                        retries += 1
-                        if retries >= self._MAX_RETRIES:
-                            result = "no_tickets_available"
-                            raise NoTicketsAvailableError(requested=count, last_checked=utcnow())
-
-            result = "success"
-            return reserved
-        finally:
-            result_attributes = attributes | {"result": result}
-            reservation_results.add(1, result_attributes)
-            reservation_duration.record(perf_counter() - started_at, result_attributes)
+        return reserved
 
     async def reserve_ticket_batch_no_locking(self, count: int, owner: str) -> [int]:
-        attributes = {"strategy": "unsafe"}
-        reservation_attempts.add(1, attributes)
-        started_at = perf_counter()
-        result = "error"
-
-        try:
-            async with self._pool.acquire() as conn:
-                async with conn.transaction():
-                    rows = await conn.fetch(
-                        """
-                        WITH grabbed AS (
-                            SELECT id FROM tickets
-                            WHERE state = 'available'
-                            ORDER BY id
-                            LIMIT $1
-                        )
-                        UPDATE tickets
-                        SET state = 'reserved', owner = $2, reserved_at = $3
-                        WHERE id IN (SELECT id FROM grabbed)
-                        AND state = 'available'
-                        RETURNING id
-                        """,
-                        count, owner, utcnow(),
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                rows = await conn.fetch(
+                    """
+                    WITH grabbed AS (
+                        SELECT id FROM tickets
+                        WHERE state = 'available'
+                        ORDER BY id
+                        LIMIT $1
                     )
+                    UPDATE tickets
+                    SET state = 'reserved', owner = $2, reserved_at = $3
+                    WHERE id IN (SELECT id FROM grabbed)
+                    AND state = 'available'
+                    RETURNING id
+                    """,
+                    count, owner, utcnow(),
+                )
 
-                    reserved_tickets = [row["id"] for row in rows]
+                reserved_tickets = [row["id"] for row in rows]
 
-                    if len(reserved_tickets) == 0:
-                        result = "no_tickets_available"
-                        raise NoTicketsAvailableError(requested=count, last_checked=utcnow())
+                if len(reserved_tickets) == 0:
+                    raise NoTicketsAvailableError(requested=count, last_checked=utcnow())
 
-                    if len(reserved_tickets) < count:
-                        result = "double_booking_detected"
-                        raise TicketDoubleBookingError(requested=count, actually_reserved=len(reserved_tickets))
+                if len(reserved_tickets) < count:
+                    raise TicketDoubleBookingError(requested=count, actually_reserved=len(reserved_tickets))
 
-                    result = "success"
-                    return reserved_tickets
-        finally:
-            result_attributes = attributes | {"result": result}
-            reservation_results.add(1, result_attributes)
-            reservation_duration.record(perf_counter() - started_at, result_attributes)
+                return reserved_tickets
